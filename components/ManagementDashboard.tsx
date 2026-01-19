@@ -29,9 +29,10 @@ const ManagementDashboard: React.FC = () => {
   // Production: Initialize with empty arrays and fetch from API
   const [clients, setClients] = useState<ClientData[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -52,11 +53,16 @@ const ManagementDashboard: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Mocking an empty initial state for a clean production start
+        setIsLoading(true);
+        // シミュレーション用の遅延
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        // 初期状態は空リスト（運用開始時）
         setClients([]);
         setActivities([]);
       } catch (error) {
         console.error("Failed to fetch client data", error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -179,8 +185,8 @@ const ManagementDashboard: React.FC = () => {
             <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
               <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">システム状態</p>
               <div className="mt-2 flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
-                <span className="text-xl font-bold text-gray-800">正常</span>
+                <div className={`w-3 h-3 rounded-full ${isLoading ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'} shadow-sm`}></div>
+                <span className="text-xl font-bold text-gray-800">{isLoading ? '読込中' : '正常'}</span>
               </div>
             </div>
           </div>
@@ -191,6 +197,15 @@ const ManagementDashboard: React.FC = () => {
               <h3 className="font-bold text-gray-800">加盟店一覧</h3>
               
               <div className="flex gap-2">
+                <select 
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value as any)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none bg-white font-bold text-gray-600"
+                >
+                  <option value="all">すべての状態</option>
+                  <option value="active">稼働中</option>
+                  <option value="inactive">停止中</option>
+                </select>
                 <div className="relative">
                   <input 
                     type="text" 
@@ -206,60 +221,74 @@ const ManagementDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="px-6 py-3 font-medium">加盟店名</th>
-                    <th className="px-6 py-3 font-medium">プラン / 担当者</th>
-                    <th className="px-6 py-3 font-medium">利用状況</th>
-                    <th className="px-6 py-3 font-medium text-center">状態</th>
-                    <th className="px-6 py-3 font-medium text-right">操作</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {filteredClients.map((client) => {
-                    const limit = PLAN_LIMITS[client.plan];
-                    const usagePercent = limit === Infinity ? 0 : (client.monthlyUsage / limit) * 100;
+            <div className="overflow-x-auto min-h-[300px]">
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                  <div className="w-10 h-10 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+                  <p className="text-sm font-bold">データを読み込んでいます...</p>
+                </div>
+              ) : filteredClients.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 mb-4 opacity-20">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                  </svg>
+                  <p className="text-sm font-bold">該当する加盟店が見つかりません</p>
+                </div>
+              ) : (
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="px-6 py-3 font-medium">加盟店名</th>
+                      <th className="px-6 py-3 font-medium">プラン / 担当者</th>
+                      <th className="px-6 py-3 font-medium">利用状況</th>
+                      <th className="px-6 py-3 font-medium text-center">状態</th>
+                      <th className="px-6 py-3 font-medium text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {filteredClients.map((client) => {
+                      const limit = PLAN_LIMITS[client.plan];
+                      const usagePercent = limit === Infinity ? 0 : (client.monthlyUsage / limit) * 100;
 
-                    return (
-                      <tr key={client.id} className="bg-white hover:bg-blue-50/30 transition-colors group">
-                        <td className="px-6 py-4 font-bold text-gray-900">{client.name}</td>
-                        <td className="px-6 py-4 text-xs">
-                          <span className="font-bold text-blue-600 uppercase block mb-1">{client.plan}</span>
-                          {client.contactPerson}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center justify-between mb-1 text-[10px]">
-                            <span>{client.monthlyUsage} / {limit === Infinity ? '∞' : limit}</span>
-                          </div>
-                          <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full ${getProgressColor(client.monthlyUsage, limit)}`}
-                              style={{ width: `${Math.min(usagePercent, 100)}%` }}
-                            ></div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            client.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
-                          }`}>
-                            {client.status === 'active' ? '稼働' : '停止'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <button 
-                            onClick={() => handleDeleteClient(client.id)}
-                            className="text-gray-300 hover:text-red-600 transition-colors p-1"
-                          >
-                            削除
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                      return (
+                        <tr key={client.id} className="bg-white hover:bg-blue-50/30 transition-colors group">
+                          <td className="px-6 py-4 font-bold text-gray-900">{client.name}</td>
+                          <td className="px-6 py-4 text-xs">
+                            <span className="font-bold text-blue-600 uppercase block mb-1">{client.plan}</span>
+                            {client.contactPerson}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-between mb-1 text-[10px]">
+                              <span>{client.monthlyUsage} / {limit === Infinity ? '∞' : limit}</span>
+                            </div>
+                            <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full ${getProgressColor(client.monthlyUsage, limit)}`}
+                                style={{ width: `${Math.min(usagePercent, 100)}%` }}
+                              ></div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              client.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                            }`}>
+                              {client.status === 'active' ? '稼働' : '停止'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button 
+                              onClick={() => handleDeleteClient(client.id)}
+                              className="text-gray-300 hover:text-red-600 transition-colors p-1"
+                            >
+                              削除
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>
@@ -286,7 +315,7 @@ const ManagementDashboard: React.FC = () => {
             <h3 className="font-bold text-sm mb-4">緊急アクション</h3>
             <button 
               onClick={handleEmergencyStop}
-              className="w-full py-2 bg-red-600 hover:bg-red-700 rounded text-xs font-bold transition-colors"
+              className="w-full py-2 bg-red-600 hover:bg-red-700 rounded text-xs font-bold transition-colors shadow-lg active:scale-95"
             >
               全サービス緊急停止
             </button>
@@ -324,7 +353,7 @@ const ManagementDashboard: React.FC = () => {
                 <select 
                   value={newClientForm.plan}
                   onChange={(e) => setNewClientForm({...newClientForm, plan: e.target.value as any})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white font-bold"
                 >
                   <option value="ライト">ライト (月60枚)</option>
                   <option value="スタンダード">スタンダード (月200枚)</option>
@@ -343,7 +372,7 @@ const ManagementDashboard: React.FC = () => {
                 />
               </div>
               <div className="pt-4 flex justify-end gap-3">
-                <button type="submit" className="w-full py-3 bg-emerald-600 text-white font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm">
+                <button type="submit" className="w-full py-3 bg-emerald-600 text-white font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm active:scale-95">
                   登録完了
                 </button>
               </div>

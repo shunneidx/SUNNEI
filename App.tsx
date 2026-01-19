@@ -170,7 +170,7 @@ const App: React.FC = () => {
                   <div className="text-sm font-bold text-gray-800">{companyInfo.name} <span className="text-[10px] font-normal text-gray-400">様</span></div>
                   <div className="text-[9px] text-blue-600 font-sans tracking-widest uppercase">{companyInfo.plan} プラン適用中</div>
                </div>
-               <button onClick={() => setIsLogoutConfirmOpen(true)} className="text-xs text-gray-400 hover:text-red-600 transition-colors font-sans underline">ログアウト</button>
+               <button onClick={() => setIsLogoutConfirmOpen(true)} className="text-xs text-gray-400 hover:text-red-600 transition-colors font-sans underline cursor-pointer">ログアウト</button>
             </div>
           )}
         </div>
@@ -219,7 +219,7 @@ const App: React.FC = () => {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
             <h3 className="text-lg font-bold text-gray-800 mb-2">{errorModal.title}</h3>
             <p className="text-sm text-gray-500 mb-6 whitespace-pre-line">{errorModal.message}</p>
-            <button onClick={() => setErrorModal({ ...errorModal, isOpen: false })} className="w-full py-3 bg-gray-800 text-white font-bold rounded-lg">閉じる</button>
+            <button onClick={() => setErrorModal({ ...errorModal, isOpen: false })} className="w-full py-3 bg-gray-800 text-white font-bold rounded-lg cursor-pointer">閉じる</button>
           </div>
         </div>
       )}
@@ -230,8 +230,8 @@ const App: React.FC = () => {
             <h3 className="text-lg font-bold text-gray-800 mb-2">作業を中断しますか？</h3>
             <p className="text-sm text-gray-500 mb-6">現在の加工内容は破棄されます。</p>
             <div className="flex gap-3">
-              <button onClick={() => setIsResetConfirmOpen(false)} className="flex-1 py-2 text-gray-600 font-bold">キャンセル</button>
-              <button onClick={() => { setAppState(AppState.UPLOAD); setIsResetConfirmOpen(false); }} className="flex-1 py-2 bg-red-600 text-white font-bold rounded-lg">中断する</button>
+              <button onClick={() => setIsResetConfirmOpen(false)} className="flex-1 py-2 text-gray-600 font-bold cursor-pointer">キャンセル</button>
+              <button onClick={() => { setAppState(AppState.UPLOAD); setIsResetConfirmOpen(false); }} className="flex-1 py-2 bg-red-600 text-white font-bold rounded-lg cursor-pointer">中断する</button>
             </div>
           </div>
         </div>
@@ -242,8 +242,8 @@ const App: React.FC = () => {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
             <h3 className="text-lg font-bold text-gray-800 mb-2">ログアウトしますか？</h3>
             <div className="flex gap-3 mt-4">
-              <button onClick={() => setIsLogoutConfirmOpen(false)} className="flex-1 py-2 text-gray-600 font-bold">キャンセル</button>
-              <button onClick={executeLogout} className="flex-1 py-2 bg-gray-800 text-white font-bold rounded-lg">ログアウト</button>
+              <button onClick={() => setIsLogoutConfirmOpen(false)} className="flex-1 py-2 text-gray-600 font-bold cursor-pointer">キャンセル</button>
+              <button onClick={executeLogout} className="flex-1 py-2 bg-gray-800 text-white font-bold rounded-lg cursor-pointer">ログアウト</button>
             </div>
           </div>
         </div>
@@ -254,7 +254,7 @@ const App: React.FC = () => {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
             <h3 className="text-lg font-bold text-red-600 mb-2">作成上限に達しました</h3>
             <p className="text-sm text-gray-500 mb-6">今月の作成可能枚数を超えています。本部にプランの相談を行ってください。</p>
-            <button onClick={() => setIsLimitReachedOpen(false)} className="w-full py-3 bg-gray-800 text-white font-bold rounded-lg">閉じる</button>
+            <button onClick={() => setIsLimitReachedOpen(false)} className="w-full py-3 bg-gray-800 text-white font-bold rounded-lg cursor-pointer">閉じる</button>
           </div>
         </div>
       )}

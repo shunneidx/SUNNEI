@@ -117,7 +117,7 @@ ${customInstruction ? `3. 個別指示: 「${customInstruction}」（※人物�
     }
 
     const parts = candidate.content?.parts;
-    if (parts) {
+    if (parts && parts.length > 0) {
       for (const part of parts) {
         if (part.inlineData) {
           return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
@@ -125,8 +125,9 @@ ${customInstruction ? `3. 個別指示: 「${customInstruction}」（※人物�
       }
     }
 
-    throw new Error("Generated image part not found.");
+    throw new Error("Generated image part not found in the response.");
   } catch (error: any) {
+    console.error("Gemini API Error:", error);
     throw error;
   }
 };

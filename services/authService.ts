@@ -1,4 +1,3 @@
-
 import { CompanyInfo, UserPlan } from '../types';
 
 /**
@@ -9,11 +8,11 @@ import { CompanyInfo, UserPlan } from '../types';
  * 2. 下記のリストに ID, 名前, プラン, ハッシュ値を貼り付けます
  */
 const MOCK_ACCOUNTS: Record<string, { name: string; plan: UserPlan; passwordHash: string }> = {
-  // パスワード: password123 (デモ用)
-  'demo_std': { 
+  // パスワード: 1234 (デモ用)
+  'demo': { 
     name: 'デモ葬儀社', 
     plan: UserPlan.STANDARD, 
-    passwordHash: 'ef92b778ba7158340a062bf7047335d47ac0070501a31d9774f260193a027376' 
+    passwordHash: '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4' 
   },
   // パスワード: admin_pass (デモ用)
   'demo_ent': { 

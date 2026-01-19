@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { EditAction } from "../types";
 
@@ -117,9 +116,11 @@ ${customInstruction ? `3. 個別指示: 「${customInstruction}」（※人物�
     }
 
     const content = response.candidates[0].content;
-    for (const part of content.parts) {
-      if (part.inlineData) {
-        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+    if (content?.parts) {
+      for (const part of content.parts) {
+        if (part.inlineData) {
+          return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        }
       }
     }
 

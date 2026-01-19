@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 
 interface ClientData {
@@ -33,7 +32,7 @@ const ManagementDashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [filterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -82,7 +81,6 @@ const ManagementDashboard: React.FC = () => {
 
   // KPI Calculations
   const totalMonthlyUsage = clients.reduce((acc, client) => acc + client.monthlyUsage, 0);
-  const activeClientsCount = clients.filter(c => c.status === 'active').length;
 
   // Handlers
   const handleExportCSV = () => {

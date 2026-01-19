@@ -1,6 +1,5 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
-import { AppState, EditAction, ProcessingStatus, UserPlan, PLAN_LIMITS, CompanyInfo } from './types';
+import { AppState, EditAction, ProcessingStatus, PLAN_LIMITS, CompanyInfo } from './types';
 import UploadArea from './components/UploadArea';
 import ActionPanel from './components/ActionPanel';
 import PhotoCanvas from './components/PhotoCanvas';

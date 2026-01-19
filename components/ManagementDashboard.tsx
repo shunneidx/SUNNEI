@@ -29,7 +29,6 @@ const ManagementDashboard: React.FC = () => {
   // Production: Initialize with empty arrays and fetch from API
   const [clients, setClients] = useState<ClientData[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus] = useState<'all' | 'active' | 'inactive'>('all');
@@ -53,14 +52,11 @@ const ManagementDashboard: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setIsLoading(true);
         // Mocking an empty initial state for a clean production start
         setClients([]);
         setActivities([]);
       } catch (error) {
         console.error("Failed to fetch client data", error);
-      } finally {
-        setIsLoading(false);
       }
     };
 

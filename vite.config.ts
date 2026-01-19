@@ -9,4 +9,11 @@ export default defineConfig({
     // 0.0.0.0で待ち受けることで、外部ネットワークからの接続を許可します
     host: true,
   },
+  preview: {
+    // Railwayでの本番公開時（npm run preview）に使用される設定
+    port: Number(process.env.PORT) || 3000,
+    host: true,
+    // Railwayのポート割り当てに完全に対応させるため、明示的に指定
+    allowedHosts: true
+  }
 });

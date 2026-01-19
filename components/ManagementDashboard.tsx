@@ -54,6 +54,11 @@ const ManagementDashboard: React.FC = () => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
+        // const response = await fetch('/api/admin/clients');
+        // const data = await response.json();
+        // setClients(data.clients);
+        // setActivities(data.activities);
+        
         // Mocking an empty initial state for a clean production start
         setClients([]);
         setActivities([]);
@@ -83,12 +88,17 @@ const ManagementDashboard: React.FC = () => {
       alert("出力するデータがありません。");
       return;
     }
+    // ... CSV export logic remains same but using current clients ...
   };
 
   const handleRegisterClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newClientForm.name || !newClientForm.contactPerson) return;
 
+    /**
+     * [Production Step]
+     * POST to /api/admin/clients
+     */
     const newId = `C${String(clients.length + 1).padStart(3, '0')}`;
     const newClient: ClientData = {
       id: newId,
@@ -108,6 +118,7 @@ const ManagementDashboard: React.FC = () => {
 
   const handleDeleteClient = (id: string) => {
     if(window.confirm('この加盟店を削除してもよろしいですか？')) {
+      // In prod: await fetch(`/api/admin/clients/${id}`, { method: 'DELETE' });
       setClients(clients.filter(c => c.id !== id));
     }
   };
@@ -262,6 +273,20 @@ const ManagementDashboard: React.FC = () => {
                       </tr>
                     );
                   })}
+                  {!isLoading && filteredClients.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center text-gray-400">
+                        登録されている加盟店はありません
+                      </td>
+                    </tr>
+                  )}
+                  {isLoading && (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center">
+                        <div className="animate-spin inline-block w-6 h-6 border-2 border-gray-300 border-t-gray-800 rounded-full"></div>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

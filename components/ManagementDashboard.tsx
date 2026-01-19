@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
+import { UserPlan, PLAN_LIMITS } from '../types';
 
 interface ClientData {
   id: string;
   name: string;
-  plan: 'ライト' | 'スタンダード' | 'エンタープライズ';
+  plan: UserPlan;
   lastActive: string;
   monthlyUsage: number;
   totalUsage: number;
@@ -19,12 +21,6 @@ interface ActivityLog {
   type: 'create' | 'login' | 'upload' | 'alert';
 }
 
-const PLAN_LIMITS: Record<string, number> = {
-  'ライト': 60,
-  'スタンダード': 200,
-  'エンタープライズ': Infinity,
-};
-
 const ManagementDashboard: React.FC = () => {
   // Production: Initialize with empty arrays and fetch from API
   const [clients, setClients] = useState<ClientData[]>([]);
@@ -38,11 +34,11 @@ const ManagementDashboard: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newClientForm, setNewClientForm] = useState<{
     name: string;
-    plan: 'ライト' | 'スタンダード' | 'エンタープライズ';
+    plan: UserPlan;
     contactPerson: string;
   }>({
     name: '',
-    plan: 'スタンダード',
+    plan: UserPlan.STANDARD,
     contactPerson: ''
   });
 
@@ -104,7 +100,7 @@ const ManagementDashboard: React.FC = () => {
     };
 
     setClients([newClient, ...clients]);
-    setNewClientForm({ name: '', plan: 'スタンダード', contactPerson: '' });
+    setNewClientForm({ name: '', plan: UserPlan.STANDARD, contactPerson: '' });
     setIsModalOpen(false);
   };
 
@@ -355,9 +351,9 @@ const ManagementDashboard: React.FC = () => {
                   onChange={(e) => setNewClientForm({...newClientForm, plan: e.target.value as any})}
                   className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white font-bold"
                 >
-                  <option value="ライト">ライト (月60枚)</option>
-                  <option value="スタンダード">スタンダード (月200枚)</option>
-                  <option value="エンタープライズ">エンタープライズ (無制限)</option>
+                  <option value={UserPlan.LITE}>ライト (月60枚)</option>
+                  <option value={UserPlan.STANDARD}>スタンダード (月200枚)</option>
+                  <option value={UserPlan.ENTERPRISE}>エンタープライズ (無制限)</option>
                 </select>
               </div>
               <div>

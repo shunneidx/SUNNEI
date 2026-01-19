@@ -115,9 +115,9 @@ ${customInstruction ? `3. 個別指示: 「${customInstruction}」（※人物�
       throw new Error("No candidates returned from AI model.");
     }
 
-    const content = response.candidates[0].content;
-    if (content?.parts) {
-      for (const part of content.parts) {
+    const parts = response.candidates[0].content?.parts;
+    if (parts) {
+      for (const part of parts) {
         if (part.inlineData) {
           return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
         }

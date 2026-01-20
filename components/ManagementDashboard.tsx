@@ -6,372 +6,217 @@ interface ClientData {
   id: string;
   name: string;
   plan: UserPlan;
-  lastActive: string;
-  monthlyUsage: number;
-  totalUsage: number;
-  status: 'active' | 'inactive';
-  contactPerson: string;
-}
-
-interface ActivityLog {
-  id: number;
-  time: string;
-  client: string;
-  action: string;
-  type: 'create' | 'login' | 'upload' | 'alert';
+  usage_count: number;
+  contact_person: string;
+  created_at: string;
 }
 
 const ManagementDashboard: React.FC = () => {
-  // Production: Initialize with empty arrays and fetch from API
   const [clients, setClients] = useState<ClientData[]>([]);
-  const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
-  
-  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newClientForm, setNewClientForm] = useState<{
-    name: string;
-    plan: UserPlan;
-    contactPerson: string;
-  }>({
+  const [newClientForm, setNewClientForm] = useState({
+    id: '',
     name: '',
     plan: UserPlan.STANDARD,
-    contactPerson: ''
+    contactPerson: '',
+    password: 'password123' // 初期パスワード
   });
 
-  /**
-   * [Production Note]
-   * Fetch actual data from backend DB
-   */
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        // シミュレーション用の遅延
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        // 初期状態は空リスト（運用開始時）
-        setClients([]);
-        setActivities([]);
-      } catch (error) {
-        console.error("Failed to fetch client data", error);
-      } finally {
-        setIsLoading(false);
+  const fetchClients = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/admin/companies');
+      if (res.ok) {
+        const data = await res.json();
+        setClients(data);
       }
-    };
-
-    fetchData();
-  }, []);
-
-  // Filtering Logic
-  const filteredClients = clients.filter(client => {
-    const matchesSearch = client.name.includes(searchQuery) || client.id.includes(searchQuery);
-    const matchesStatus = filterStatus === 'all' || client.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
-
-  // KPI Calculations
-  const totalMonthlyUsage = clients.reduce((acc, client) => acc + client.monthlyUsage, 0);
-
-  // Handlers
-  const handleExportCSV = () => {
-    if (clients.length === 0) {
-      alert("出力するデータがありません。");
-      return;
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchClients();
+  }, []);
 
   const handleRegisterClient = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newClientForm.name || !newClientForm.contactPerson) return;
+    
+    // パスワードのハッシュ化（簡易版：SHA-256）
+    const msgUint8 = new TextEncoder().encode(newClientForm.password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const passwordHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
-    const newId = `C${String(clients.length + 1).padStart(3, '0')}`;
-    const newClient: ClientData = {
-      id: newId,
-      name: newClientForm.name.endsWith('様') ? newClientForm.name : `${newClientForm.name} 様`,
-      plan: newClientForm.plan,
-      contactPerson: newClientForm.contactPerson,
-      status: 'active',
-      monthlyUsage: 0,
-      totalUsage: 0,
-      lastActive: '未アクセス',
-    };
+    try {
+      const res = await fetch('/api/admin/companies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newClientForm.id,
+          name: newClientForm.name,
+          plan: newClientForm.plan,
+          contactPerson: newClientForm.contactPerson,
+          passwordHash
+        })
+      });
 
-    setClients([newClient, ...clients]);
-    setNewClientForm({ name: '', plan: UserPlan.STANDARD, contactPerson: '' });
-    setIsModalOpen(false);
-  };
-
-  const handleDeleteClient = (id: string) => {
-    if(window.confirm('この加盟店を削除してもよろしいですか？')) {
-      setClients(clients.filter(c => c.id !== id));
+      if (res.ok) {
+        setIsModalOpen(false);
+        setNewClientForm({ id: '', name: '', plan: UserPlan.STANDARD, contactPerson: '', password: 'password123' });
+        fetchClients();
+      } else {
+        alert('登録に失敗しました。IDが重複している可能性があります。');
+      }
+    } catch (error) {
+      alert('通信エラーが発生しました。');
     }
   };
 
-  const handleEmergencyStop = () => {
-    if (window.confirm("⚠ 警告：緊急停止モード\n\nただちに全加盟店のサービス利用を停止しますか？")) {
-      alert("システム停止コマンドを送信しました。");
+  const handleDeleteClient = async (id: string) => {
+    if (id === 'admin') return alert('管理者は削除できません。');
+    if (!window.confirm('この加盟店を削除しますか？データは復旧できません。')) return;
+
+    try {
+      const res = await fetch(`/api/admin/companies/${id}`, { method: 'DELETE' });
+      if (res.ok) fetchClients();
+    } catch (error) {
+      alert('削除に失敗しました。');
     }
   };
 
-  const getProgressColor = (usage: number, limit: number) => {
-    if (limit === Infinity) return 'bg-emerald-500';
-    const percentage = (usage / limit) * 100;
-    if (percentage >= 90) return 'bg-red-500';
-    if (percentage >= 70) return 'bg-amber-500';
-    return 'bg-blue-500';
-  };
+  const filteredClients = clients.filter(c => 
+    c.name.includes(searchQuery) || c.id.includes(searchQuery)
+  );
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-4 md:p-8 animate-fade-in bg-gray-50/50 min-h-full relative font-sans">
-      
-      {/* Header */}
+    <div className="w-full max-w-7xl mx-auto p-4 md:p-8 animate-fade-in bg-gray-50/50 min-h-full font-sans">
       <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
         <div>
           <h2 className="text-2xl font-serif font-bold text-gray-800 flex items-center gap-3">
             <span className="bg-gray-800 text-white w-8 h-8 rounded flex items-center justify-center text-sm font-serif">瞬</span>
             管理ダッシュボード
           </h2>
-          <p className="text-sm text-gray-500 mt-1 pl-11">Senior & Co. 本部専用・加盟店管理パネル</p>
+          <p className="text-sm text-gray-500 mt-1">加盟店データベース・利用状況監視</p>
         </div>
-        <div className="flex gap-3">
-          <button 
-            onClick={handleExportCSV}
-            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-50 shadow-sm transition-all"
-          >
-            レポート出力 (CSV)
-          </button>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 shadow-sm transition-all flex items-center gap-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            新規加盟店登録
-          </button>
+        <button 
+          onClick={() => setIsModalOpen(true)}
+          className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+        >
+          新規加盟店登録
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+          <p className="text-xs text-gray-500 font-bold uppercase">全作成数</p>
+          <p className="text-3xl font-bold mt-1">{clients.reduce((acc, c) => acc + c.usage_count, 0)} <span className="text-sm font-normal text-gray-400">枚</span></p>
+        </div>
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+          <p className="text-xs text-gray-500 font-bold uppercase">稼働社数</p>
+          <p className="text-3xl font-bold mt-1">{clients.length} <span className="text-sm font-normal text-gray-400">社</span></p>
+        </div>
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center gap-3">
+          <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
+          <span className="text-xl font-bold">システム稼働中</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        
-        {/* Main Content Area */}
-        <div className="lg:col-span-3 space-y-6">
-          
-          {/* KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">今月の作成総数</p>
-              <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-gray-900">{totalMonthlyUsage}</span>
-                <span className="text-sm text-gray-500">枚</span>
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">登録加盟店数</p>
-              <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-gray-900">{clients.length}</span>
-                <span className="text-sm text-gray-500">社</span>
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">システム状態</p>
-              <div className="mt-2 flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${isLoading ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'} shadow-sm`}></div>
-                <span className="text-xl font-bold text-gray-800">{isLoading ? '読込中' : '正常'}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Client List */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <h3 className="font-bold text-gray-800">加盟店一覧</h3>
-              
-              <div className="flex gap-2">
-                <select 
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value as any)}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none bg-white font-bold text-gray-600"
-                >
-                  <option value="all">すべての状態</option>
-                  <option value="active">稼働中</option>
-                  <option value="inactive">停止中</option>
-                </select>
-                <div className="relative">
-                  <input 
-                    type="text" 
-                    placeholder="名前・IDで検索" 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-full sm:w-64"
-                  />
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-gray-400 absolute left-3 top-2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto min-h-[300px]">
-              {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                  <div className="w-10 h-10 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-                  <p className="text-sm font-bold">データを読み込んでいます...</p>
-                </div>
-              ) : filteredClients.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 mb-4 opacity-20">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-                  </svg>
-                  <p className="text-sm font-bold">該当する加盟店が見つかりません</p>
-                </div>
-              ) : (
-                <table className="w-full text-sm text-left">
-                  <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      <th className="px-6 py-3 font-medium">加盟店名</th>
-                      <th className="px-6 py-3 font-medium">プラン / 担当者</th>
-                      <th className="px-6 py-3 font-medium">利用状況</th>
-                      <th className="px-6 py-3 font-medium text-center">状態</th>
-                      <th className="px-6 py-3 font-medium text-right">操作</th>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+          <h3 className="font-bold">加盟店一覧</h3>
+          <input 
+            type="text" placeholder="検索..." value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm outline-none w-64 bg-white"
+          />
+        </div>
+        <div className="overflow-x-auto">
+          {isLoading ? (
+            <div className="py-20 text-center text-gray-400">読込中...</div>
+          ) : (
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-gray-500 uppercase bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3">ID / 名前</th>
+                  <th className="px-6 py-3">プラン / 担当</th>
+                  <th className="px-6 py-3">利用状況</th>
+                  <th className="px-6 py-3 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filteredClients.map(client => {
+                  const limit = PLAN_LIMITS[client.plan as UserPlan];
+                  const percent = limit === Infinity ? 0 : (client.usage_count / limit) * 100;
+                  return (
+                    <tr key={client.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <div className="text-[10px] text-gray-400">ID: {client.id}</div>
+                        <div className="font-bold">{client.name}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-blue-600 font-bold text-xs">{client.plan}</div>
+                        <div className="text-gray-500">{client.contact_person}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex justify-between text-[10px] mb-1">
+                          <span>{client.usage_count} / {limit === Infinity ? '∞' : limit}</span>
+                        </div>
+                        <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div className={`h-full ${percent > 90 ? 'bg-red-500' : 'bg-blue-600'}`} style={{ width: `${Math.min(percent, 100)}%` }}></div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        {client.id !== 'admin' && (
+                          <button onClick={() => handleDeleteClient(client.id)} className="text-gray-300 hover:text-red-600 transition-colors cursor-pointer">削除</button>
+                        )}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {filteredClients.map((client) => {
-                      const limit = PLAN_LIMITS[client.plan];
-                      const usagePercent = limit === Infinity ? 0 : (client.monthlyUsage / limit) * 100;
-
-                      return (
-                        <tr key={client.id} className="bg-white hover:bg-blue-50/30 transition-colors group">
-                          <td className="px-6 py-4 font-bold text-gray-900">{client.name}</td>
-                          <td className="px-6 py-4 text-xs">
-                            <span className="font-bold text-blue-600 uppercase block mb-1">{client.plan}</span>
-                            {client.contactPerson}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center justify-between mb-1 text-[10px]">
-                              <span>{client.monthlyUsage} / {limit === Infinity ? '∞' : limit}</span>
-                            </div>
-                            <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
-                              <div 
-                                className={`h-full rounded-full ${getProgressColor(client.monthlyUsage, limit)}`}
-                                style={{ width: `${Math.min(usagePercent, 100)}%` }}
-                              ></div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              client.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
-                            }`}>
-                              {client.status === 'active' ? '稼働' : '停止'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <button 
-                              onClick={() => handleDeleteClient(client.id)}
-                              className="text-gray-300 hover:text-red-600 transition-colors p-1"
-                            >
-                              削除
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Sidebar */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-             <h3 className="font-bold text-xs uppercase tracking-wider mb-4">活動履歴</h3>
-             <div className="space-y-4">
-               {activities.length === 0 ? (
-                 <p className="text-xs text-gray-400 text-center py-4">履歴はありません</p>
-               ) : (
-                 activities.map(log => (
-                   <div key={log.id} className="text-xs border-l-2 border-blue-500 pl-3">
-                     <p className="font-bold text-gray-800">{log.client}</p>
-                     <p className="text-gray-500">{log.action}</p>
-                   </div>
-                 ))
-               )}
-             </div>
-          </div>
-
-          <div className="bg-gray-800 rounded-xl p-5 text-white">
-            <h3 className="font-bold text-sm mb-4">緊急アクション</h3>
-            <button 
-              onClick={handleEmergencyStop}
-              className="w-full py-2 bg-red-600 hover:bg-red-700 rounded text-xs font-bold transition-colors shadow-lg active:scale-95"
-            >
-              全サービス緊急停止
-            </button>
-          </div>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
-      {/* Registration Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="bg-gray-800 px-6 py-4 flex items-center justify-between">
-              <h3 className="text-white font-bold text-lg">新規加盟店登録</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
+            <div className="bg-gray-800 p-4 text-white font-bold flex justify-between">
+              新規加盟店登録
+              <button onClick={() => setIsModalOpen(false)}>×</button>
             </div>
-            
             <form onSubmit={handleRegisterClient} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">加盟店名</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="例：株式会社メモリアル" 
-                  value={newClientForm.name}
-                  onChange={(e) => setNewClientForm({...newClientForm, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                />
+                <label className="block text-xs font-bold text-gray-500 mb-1">加盟店ID (英数字)</label>
+                <input required type="text" value={newClientForm.id} onChange={e => setNewClientForm({...newClientForm, id: e.target.value})} className="w-full px-3 py-2 border rounded" placeholder="shop01" />
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">契約プラン</label>
-                <select 
-                  value={newClientForm.plan}
-                  onChange={(e) => setNewClientForm({...newClientForm, plan: e.target.value as any})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white font-bold"
-                >
-                  <option value={UserPlan.LITE}>ライト (月60枚)</option>
-                  <option value={UserPlan.STANDARD}>スタンダード (月200枚)</option>
+                <label className="block text-xs font-bold text-gray-500 mb-1">加盟店名</label>
+                <input required type="text" value={newClientForm.name} onChange={e => setNewClientForm({...newClientForm, name: e.target.value})} className="w-full px-3 py-2 border rounded" placeholder="瞬影葬儀社" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">契約プラン</label>
+                <select value={newClientForm.plan} onChange={e => setNewClientForm({...newClientForm, plan: e.target.value as UserPlan})} className="w-full px-3 py-2 border rounded bg-white">
+                  <option value={UserPlan.LITE}>ライト (60枚)</option>
+                  <option value={UserPlan.STANDARD}>スタンダード (200枚)</option>
                   <option value={UserPlan.ENTERPRISE}>エンタープライズ (無制限)</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">担当者名</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="例：山田 太郎" 
-                  value={newClientForm.contactPerson}
-                  onChange={(e) => setNewClientForm({...newClientForm, contactPerson: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                />
+                <label className="block text-xs font-bold text-gray-500 mb-1">担当者名</label>
+                <input required type="text" value={newClientForm.contactPerson} onChange={e => setNewClientForm({...newClientForm, contactPerson: e.target.value})} className="w-full px-3 py-2 border rounded" placeholder="山田 太郎" />
               </div>
-              <div className="pt-4 flex justify-end gap-3">
-                <button type="submit" className="w-full py-3 bg-emerald-600 text-white font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm active:scale-95">
-                  登録完了
-                </button>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">初期パスワード</label>
+                <input required type="text" value={newClientForm.password} onChange={e => setNewClientForm({...newClientForm, password: e.target.value})} className="w-full px-3 py-2 border rounded" />
               </div>
+              <button type="submit" className="w-full py-3 bg-emerald-600 text-white font-bold rounded shadow-lg active:scale-95 transition-all cursor-pointer">登録を実行する</button>
             </form>
           </div>
         </div>

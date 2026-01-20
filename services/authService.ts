@@ -1,30 +1,5 @@
-import { CompanyInfo, UserPlan } from '../types';
 
-/**
- * 加盟店リスト（手動管理用）
- * 
- * 運用手順:
- * 1. 任意のSHA-256変換ツールでパスワードをハッシュ化します
- * 2. 下記のリストに ID, 名前, プラン, ハッシュ値を貼り付けます
- */
-const MOCK_ACCOUNTS: Record<string, { name: string; plan: UserPlan; passwordHash: string }> = {
-  // パスワード: 1234 (デモ用)
-  'demo': { 
-    name: 'デモ葬儀社', 
-    plan: UserPlan.STANDARD, 
-    passwordHash: '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4' 
-  },
-  // パスワード: admin_pass (デモ用)
-  'demo_ent': { 
-    name: '瞬影メモリアル 本部', 
-    plan: UserPlan.ENTERPRISE, 
-    passwordHash: '2064505391c53229b43343603d6f78f888da76c81335359c381f621350a4d538' 
-  },
-  /* 
-    ここに新規加盟店を追加してください 
-    'id': { name: '社名', plan: UserPlan.LITE, passwordHash: '...' },
-  */
-};
+import { CompanyInfo } from '../types';
 
 export interface AuthSession {
   company: CompanyInfo;
@@ -32,7 +7,7 @@ export interface AuthSession {
 }
 
 /**
- * 文字列をSHA-256ハッシュに変換する（ブラウザ標準APIを使用）
+ * 文字列をSHA-256ハッシュに変換する
  */
 async function computeSHA256(message: string): Promise<string> {
   const msgUint8 = new TextEncoder().encode(message);
@@ -44,32 +19,25 @@ async function computeSHA256(message: string): Promise<string> {
 
 export const authService = {
   /**
-   * ログイン認証処理
+   * ログイン認証処理 (サーバーAPI呼び出し)
    */
   async login(id: string, password: string): Promise<AuthSession> {
-    // ネットワーク遅延のシミュレーション（ユーザー体験のため）
-    await new Promise(resolve => setTimeout(resolve, 800));
+    const passwordHash = await computeSHA256(password);
 
-    const account = MOCK_ACCOUNTS[id];
-    if (!account) {
-      throw new Error('加盟店IDまたはパスワードが正しくありません。');
-    }
-
-    // 入力されたパスワードをハッシュ化して比較
-    const inputHash = await computeSHA256(password);
-    if (inputHash !== account.passwordHash) {
-      throw new Error('加盟店IDまたはパスワードが正しくありません。');
-    }
-
-    const session: AuthSession = {
-      company: {
-        id: id,
-        name: account.name,
-        plan: account.plan,
+    const response = await fetch('/api/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      token: `session-${Math.random().toString(36).substring(2)}`
-    };
+      body: JSON.stringify({ id, passwordHash }),
+    });
 
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'ログインに失敗しました。');
+    }
+
+    const session = await response.json() as AuthSession;
     localStorage.setItem('shunnei_session', JSON.stringify(session));
     return session;
   },

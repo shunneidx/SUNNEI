@@ -163,15 +163,19 @@ const App: React.FC = () => {
               )}
               {appState === AppState.CROPPING && <CropTool imageSrc={currentImage || uploadedImage!} onConfirm={handleCropConfirm} onCancel={handleCropCancel} />}
               {appState === AppState.EDITING && companyInfo && (
-                <div className="w-full max-w-7xl grid grid-cols-1 md:grid-cols-12 gap-6 p-4 h-full max-h-[90vh]">
-                  <div className="md:col-span-8 lg:col-span-9 flex items-center justify-center bg-gray-200/50 rounded-2xl p-4">
+                <div className="w-full max-w-7xl grid grid-cols-1 md:grid-cols-12 gap-4 p-4 h-full max-h-[90vh]">
+                  {/* 比率を md:col-span-8 から md:col-span-7 に変更して右側のスペースを広げる */}
+                  <div className="md:col-span-7 lg:col-span-8 flex items-center justify-center bg-gray-200/50 rounded-2xl p-4 overflow-hidden">
                     <PhotoCanvas imageSrc={currentImage} isLoading={status.isProcessing} loadingMessage={status.message} />
                   </div>
-                  <ActionPanel 
-                    onAction={handleEditAction} disabled={status.isProcessing} onDownload={handleDownload}
-                    onReset={() => setAppState(AppState.UPLOAD)} onStartCrop={() => setAppState(AppState.CROPPING)}
-                    appliedBg={appliedBg} appliedClothing={appliedClothing} userPlan={companyInfo.plan} usageCount={usageCount}
-                  />
+                  {/* パネル側を md:col-span-5 に広げる */}
+                  <div className="md:col-span-5 lg:col-span-4 h-full overflow-hidden">
+                    <ActionPanel 
+                      onAction={handleEditAction} disabled={status.isProcessing} onDownload={handleDownload}
+                      onReset={() => setAppState(AppState.UPLOAD)} onStartCrop={() => setAppState(AppState.CROPPING)}
+                      appliedBg={appliedBg} appliedClothing={appliedClothing} userPlan={companyInfo.plan} usageCount={usageCount}
+                    />
+                  </div>
                 </div>
               )}
             </>

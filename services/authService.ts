@@ -38,7 +38,8 @@ export const authService = {
     }
 
     const session = await response.json() as AuthSession;
-    localStorage.setItem('shunnei_session', JSON.stringify(session));
+    // セキュリティのため sessionStorage を使用（ブラウザを閉じるとクリア）
+    sessionStorage.setItem('shunnei_session', JSON.stringify(session));
     return session;
   },
 
@@ -46,7 +47,7 @@ export const authService = {
    * 保存されているセッションを取得
    */
   getSession(): AuthSession | null {
-    const stored = localStorage.getItem('shunnei_session');
+    const stored = sessionStorage.getItem('shunnei_session');
     if (!stored) return null;
     try {
       return JSON.parse(stored) as AuthSession;
@@ -59,6 +60,6 @@ export const authService = {
    * ログアウト処理
    */
   logout(): void {
-    localStorage.removeItem('shunnei_session');
+    sessionStorage.removeItem('shunnei_session');
   }
 };

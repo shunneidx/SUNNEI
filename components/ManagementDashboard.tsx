@@ -47,7 +47,8 @@ const ManagementDashboard: React.FC = () => {
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
-      return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+      // 日付（日）まで表示するように変更
+      return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
     } catch (e) {
       return '不明';
     }

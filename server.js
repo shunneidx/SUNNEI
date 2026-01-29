@@ -4,6 +4,7 @@ import pg from 'pg';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import cron from 'node-cron';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +21,9 @@ const pool = new Pool({
   }
 });
 
+/**
+ * データベースの初期化
+ */
 const initDb = async () => {
   const client = await pool.connect();
   try {
@@ -50,7 +54,7 @@ const initDb = async () => {
         name = EXCLUDED.name,
         plan = EXCLUDED.plan;
     `);
-    console.log('Database initialized and credentials synchronized successfully');
+    console.log('Database initialized successfully');
   } catch (err) {
     console.error('Database initialization error:', err);
   } finally {
@@ -59,6 +63,23 @@ const initDb = async () => {
 };
 
 initDb();
+
+/**
+ * 定期実行（Cron）方式による月次リセット処理
+ * 毎月1日の 00:00 に実行
+ */
+cron.schedule('0 0 1 * *', async () => {
+  console.log('[Scheduled Task] 月次利用枚数のリセットを開始します...');
+  try {
+    const result = await pool.query('UPDATE companies SET usage_count = 0');
+    console.log(`[Scheduled Task] リセット完了: ${result.rowCount} 件の加盟店データを更新しました。`);
+  } catch (err) {
+    console.error('[Scheduled Task] リセット処理に失敗しました:', err);
+  }
+}, {
+  scheduled: true,
+  timezone: "Asia/Tokyo"
+});
 
 app.use(cors());
 app.use(express.json());

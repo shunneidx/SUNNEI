@@ -44,6 +44,15 @@ const ManagementDashboard: React.FC = () => {
     fetchClients();
   }, []);
 
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+    } catch (e) {
+      return '不明';
+    }
+  };
+
   const handlePlanChange = async (id: string, newPlan: UserPlan) => {
     if (id === 'admin') return;
     setUpdatingId(id);
@@ -55,7 +64,6 @@ const ManagementDashboard: React.FC = () => {
       });
 
       if (res.ok) {
-        // ローカルステートを即座に更新してUIに反映
         setClients(prev => prev.map(c => c.id === id ? { ...c, plan: newPlan } : c));
       } else {
         alert('プランの更新に失敗しました。');
@@ -70,7 +78,6 @@ const ManagementDashboard: React.FC = () => {
   const handleRegisterClient = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // パスワードのハッシュ化（簡易版：SHA-256）
     const msgUint8 = new TextEncoder().encode(newClientForm.password);
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -151,14 +158,14 @@ const ManagementDashboard: React.FC = () => {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+        <div className="p-4 bg-gray-50 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
           <h3 className="font-bold">加盟店一覧</h3>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4 justify-end">
             <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-1 rounded">※ プルダウンからプランを直接変更できます</span>
             <input 
               type="text" placeholder="検索..." value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm outline-none w-64 bg-white"
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm outline-none w-full sm:w-64 bg-white"
             />
           </div>
         </div>
@@ -170,6 +177,7 @@ const ManagementDashboard: React.FC = () => {
               <thead className="text-xs text-gray-500 uppercase bg-gray-50">
                 <tr>
                   <th className="px-6 py-3">ID / 名前</th>
+                  <th className="px-6 py-3">契約開始</th>
                   <th className="px-6 py-3">プラン / 担当者</th>
                   <th className="px-6 py-3">利用状況</th>
                   <th className="px-6 py-3 text-right">操作</th>
@@ -186,6 +194,10 @@ const ManagementDashboard: React.FC = () => {
                       <td className="px-6 py-4">
                         <div className="text-[10px] text-gray-400">ID: {client.id}</div>
                         <div className="font-bold">{client.name}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-gray-600 font-medium">{formatDate(client.created_at)}</div>
+                        <div className="text-[9px] text-gray-400 mt-0.5">登録済</div>
                       </td>
                       <td className="px-6 py-4">
                         {client.id === 'admin' ? (

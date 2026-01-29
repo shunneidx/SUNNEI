@@ -39,8 +39,6 @@ const initDb = async () => {
     await client.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS contact_person TEXT;`);
 
     // 管理者およびデモデータの挿入（UPSERTロジックに変更）
-    // admin / 1234 -> 03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4
-    // ON CONFLICT で DO UPDATE を指定することで、既存のIDがあってもパスワードを強制更新します
     await client.query(`
       INSERT INTO companies (id, name, plan, password_hash, usage_count, contact_person)
       VALUES 
@@ -104,6 +102,18 @@ app.post('/api/admin/companies', async (req, res) => {
     res.json({ message: '登録完了' });
   } catch (err) {
     res.status(500).json({ message: '登録失敗（ID重複など）' });
+  }
+});
+
+// 管理用：プラン更新API
+app.patch('/api/admin/companies/:id/plan', async (req, res) => {
+  const { plan } = req.body;
+  const { id } = req.params;
+  try {
+    await pool.query('UPDATE companies SET plan = $1 WHERE id = $2', [plan, id]);
+    res.json({ message: 'プラン更新完了' });
+  } catch (err) {
+    res.status(500).json({ message: '更新失敗' });
   }
 });
 

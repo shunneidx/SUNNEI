@@ -1,7 +1,5 @@
 
 import React, { useRef, useState } from 'react';
-import heic2any from 'heic2any';
-import UTIF from 'utif';
 
 interface UploadAreaProps {
   onImageSelected: (base64: string) => void;
@@ -10,116 +8,42 @@ interface UploadAreaProps {
 const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [warning, setWarning] = useState<string | null>(null);
-  const [isConverting, setIsConverting] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      handleFileUpload(file);
+      processFile(file);
     }
   };
 
-  const convertTiffToDataUrl = async (file: File): Promise<string> => {
-    const buffer = await file.arrayBuffer();
-    const ifds = UTIF.decode(buffer);
-    UTIF.decodeImage(buffer, ifds[0]);
-    const rgba = UTIF.toRGBA8(ifds[0]);
-    
-    const canvas = document.createElement('canvas');
-    canvas.width = ifds[0].width;
-    canvas.height = ifds[0].height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Could not get canvas context');
-    
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(rgba);
-    ctx.putImageData(imgData, 0, 0);
-    
-    return canvas.toDataURL('image/png');
-  };
-
-  const handleFileUpload = async (file: File) => {
+  const processFile = (file: File) => {
     setWarning(null);
-    const extension = file.name.split('.').pop()?.toLowerCase();
-    
-    try {
-      let finalDataUrl = '';
-
-      // HEIC/HEIF Support
-      if (extension === 'heic' || extension === 'heif') {
-        setIsConverting(true);
-        try {
-          // 最も確実な変換方法: Fileを一度 ArrayBuffer として読み込み、Blobを再構成して渡す
-          const buffer = await file.arrayBuffer();
-          const fileBlob = new Blob([buffer], { type: 'image/heic' });
-          
-          const result = await heic2any({
-            blob: fileBlob,
-            toType: 'image/jpeg',
-            quality: 0.8
-          });
-          
-          const convertedBlob = Array.isArray(result) ? result[0] : result;
-          
-          finalDataUrl = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(convertedBlob);
-          });
-        } catch (heicErr) {
-          console.error('HEIC specific conversion error:', heicErr);
-          throw heicErr;
-        } finally {
-          setIsConverting(false);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      
+      // Check Image Dimensions for Print Quality
+      const img = new Image();
+      img.onload = () => {
+        const minSide = Math.min(img.width, img.height);
+        // Warning threshold: less than 1000px on shortest side (approx. 2MP)
+        // For L-ban (3.5x5) at 300dpi, you need roughly 1050x1500px
+        if (minSide < 1000) {
+          setWarning(`※ 画像サイズが小さいです（${img.width}x${img.height}px）。\n印刷時に粗くなる可能性があります。できるだけ高画質な写真をお使いください。`);
         }
-      } 
-      // TIFF Support
-      else if (extension === 'tiff' || extension === 'tif') {
-        setIsConverting(true);
-        finalDataUrl = await convertTiffToDataUrl(file);
-        setIsConverting(false);
-      }
-      // Standard Images
-      else if (file.type.startsWith('image/')) {
-        finalDataUrl = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
-        });
-      } else {
-        setWarning('対応していないファイル形式です。画像ファイル（JPG, PNG, HEIC, TIFFなど）を選択してください。');
-        return;
-      }
-
-      if (finalDataUrl) {
-        processBase64Image(finalDataUrl);
-      }
-    } catch (err) {
-      console.error('File conversion error:', err);
-      setWarning('ファイルの読み込みに失敗しました。ファイルが破損しているか、対応していない形式の可能性があります。');
-      setIsConverting(false);
-    }
-  };
-
-  const processBase64Image = (base64: string) => {
-    const img = new Image();
-    img.onload = () => {
-      const minSide = Math.min(img.width, img.height);
-      if (minSide < 1000) {
-        setWarning(`※ 画像サイズが小さいです（${img.width}x${img.height}px）。\n印刷時に粗くなる可能性があります。できるだけ高画質な写真をお使いください。`);
-      }
-      onImageSelected(base64);
+        onImageSelected(result);
+      };
+      img.src = result;
     };
-    img.src = base64;
+    reader.readAsDataURL(file);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     const file = e.dataTransfer.files?.[0];
-    if (file) {
-      handleFileUpload(file);
+    if (file && file.type.startsWith('image/')) {
+      processFile(file);
     }
   };
 
@@ -135,41 +59,25 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
       onDragOver={handleDragOver}
     >
       <div 
-        className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all duration-300 relative overflow-hidden ${
-          isConverting ? 'border-blue-300 bg-blue-50 cursor-wait' : 
-          warning ? 'border-amber-400 bg-amber-50' : 
-          'border-gray-400 hover:border-gray-600 hover:bg-gray-50'
-        }`}
-        onClick={() => !isConverting && fileInputRef.current?.click()}
+        className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors duration-300 ${warning ? 'border-amber-400 bg-amber-50' : 'border-gray-400 hover:border-gray-600 hover:bg-gray-50'}`}
+        onClick={() => fileInputRef.current?.click()}
       >
         <input 
           type="file" 
           ref={fileInputRef} 
           className="hidden" 
-          accept="image/*,.heic,.heif,.tiff,.tif"
+          accept="image/*"
           onChange={handleFileChange}
-          disabled={isConverting}
         />
-        
         <div className="flex flex-col items-center gap-4">
-          {isConverting ? (
-            <div className="flex flex-col items-center">
-               <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-               <p className="text-xl font-serif text-blue-700 font-medium animate-pulse">画像を最適化中...</p>
-               <p className="text-sm text-blue-500 mt-2">HEIC/TIFF形式を変換しています。そのままお待ちください。</p>
-            </div>
-          ) : (
-            <>
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-16 h-16 ${warning ? 'text-amber-500' : 'text-gray-400'}`}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-              </svg>
-              <div>
-                <p className="text-xl font-serif text-gray-700 font-medium">写真をアップロード</p>
-                <p className="text-sm text-gray-500 mt-2">クリックまたはドラッグ＆ドロップ</p>
-                <p className="text-xs text-gray-400 mt-1">対応: JPG, PNG, HEIC, TIFF</p>
-              </div>
-            </>
-          )}
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-16 h-16 ${warning ? 'text-amber-500' : 'text-gray-400'}`}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+          </svg>
+          <div>
+            <p className="text-xl font-serif text-gray-700 font-medium">写真をアップロード</p>
+            <p className="text-sm text-gray-500 mt-2">クリックまたはドラッグ＆ドロップ</p>
+            <p className="text-xs text-gray-400 mt-1">推奨: 正面を向いた鮮明な写真</p>
+          </div>
         </div>
       </div>
 

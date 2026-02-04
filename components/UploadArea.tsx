@@ -48,18 +48,31 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
       // HEIC/HEIF Support
       if (extension === 'heic' || extension === 'heif') {
         setIsConverting(true);
-        const blob = await heic2any({
-          blob: file,
-          toType: 'image/jpeg',
-          quality: 0.8
-        });
-        const convertedBlob = Array.isArray(blob) ? blob[0] : blob;
-        finalDataUrl = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(convertedBlob);
-        });
-        setIsConverting(false);
+        try {
+          // File を一度純粋な Blob に変換してから渡す（古い実装での File オブジェクトの互換性問題回避）
+          const fileBlob = new Blob([file], { type: file.type });
+          
+          const result = await heic2any({
+            blob: fileBlob,
+            toType: 'image/jpeg',
+            quality: 0.8,
+            multiple: false // 確実に単一の Blob を受け取る
+          });
+          
+          const convertedBlob = Array.isArray(result) ? result[0] : result;
+          
+          finalDataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(convertedBlob);
+          });
+        } catch (heicErr) {
+          console.error('HEIC specific conversion error:', heicErr);
+          throw heicErr;
+        } finally {
+          setIsConverting(false);
+        }
       } 
       // TIFF Support
       else if (extension === 'tiff' || extension === 'tif') {
@@ -84,7 +97,7 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
       }
     } catch (err) {
       console.error('File conversion error:', err);
-      setWarning('ファイルの読み込みに失敗しました。ファイルが破損しているか、対応していない形式の可能性があります。');
+      setWarning('ファイルの読み込みに失敗しました。HEIC形式の解析ができなかったか、ファイルが破損している可能性があります。');
       setIsConverting(false);
     }
   };

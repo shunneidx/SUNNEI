@@ -18,7 +18,7 @@
     "express": "^4.18.0",
     "cors": "^2.8.5",
     "node-cron": "^3.0.3",
-    "heic2any": "^0.0.4",
+    "heic2any": "^1.1.0",
     "utif": "^1.1.0"
   },
   "devDependencies": {

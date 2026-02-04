@@ -49,14 +49,14 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
       if (extension === 'heic' || extension === 'heif') {
         setIsConverting(true);
         try {
-          // File を一度純粋な Blob に変換してから渡す（古い実装での File オブジェクトの互換性問題回避）
-          const fileBlob = new Blob([file], { type: file.type });
+          // 最も確実な変換方法: Fileを一度 ArrayBuffer として読み込み、Blobを再構成して渡す
+          const buffer = await file.arrayBuffer();
+          const fileBlob = new Blob([buffer], { type: 'image/heic' });
           
           const result = await heic2any({
             blob: fileBlob,
             toType: 'image/jpeg',
-            quality: 0.8,
-            multiple: false // 確実に単一の Blob を受け取る
+            quality: 0.8
           });
           
           const convertedBlob = Array.isArray(result) ? result[0] : result;
@@ -97,7 +97,7 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
       }
     } catch (err) {
       console.error('File conversion error:', err);
-      setWarning('ファイルの読み込みに失敗しました。HEIC形式の解析ができなかったか、ファイルが破損している可能性があります。');
+      setWarning('ファイルの読み込みに失敗しました。ファイルが破損しているか、対応していない形式の可能性があります。');
       setIsConverting(false);
     }
   };

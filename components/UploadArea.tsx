@@ -161,7 +161,7 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
         }`}
         onClick={() => !isProcessing && fileInputRef.current?.click()}
       >
-        <input type="file" fileInputRef={fileInputRef} className="hidden" accept="image/*,.heic,.heif" onChange={handleFileChange} />
+        <input type="file" ref={fileInputRef} className="hidden" accept="image/*,.heic,.heif" onChange={handleFileChange} />
         
         {isProcessing ? (
           <div className="flex flex-col items-center gap-6">

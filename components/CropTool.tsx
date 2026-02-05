@@ -182,12 +182,12 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
         </div>
 
         <div 
-          containerRef={containerRef}
+          ref={containerRef}
           className="relative overflow-hidden select-none bg-gray-900 rounded-xl shadow-2xl touch-none ring-4 ring-gray-100"
           style={{ maxWidth: '100%', maxHeight: '50vh' }}
         >
           <img
-            imageRef={imageRef}
+            ref={imageRef}
             src={imageSrc}
             onLoad={onImageLoad}
             alt="Crop Source"

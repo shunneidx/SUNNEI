@@ -29,6 +29,7 @@ const App: React.FC = () => {
   const [currentImage, setCurrentImage] = useState<string | null>(null);
   const [originalImage, setOriginalImage] = useState<string | null>(null); 
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [deceasedName, setDeceasedName] = useState<string>('');
   
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
   const [usageCount, setUsageCount] = useState<number>(0);
@@ -73,6 +74,7 @@ const App: React.FC = () => {
     setCurrentImage(null);
     setUploadedImage(null);
     setOriginalImage(null);
+    setDeceasedName('');
     setIsAdminMode(false);
     setAppState(AppState.LOGIN);
     setIsLogoutConfirmOpen(false);
@@ -127,21 +129,16 @@ const App: React.FC = () => {
     setStatus({ isProcessing: true, message: '四つ切りサイズ(3000x3600px)へ最適化して保存中...' });
 
     try {
-      // 3000x3600pxへリサイズしてダウンロード
       const img = new Image();
       img.onload = async () => {
         const canvas = document.createElement('canvas');
-        // 四つ切りサイズ比率 (3000:3600)
         canvas.width = 3000;
         canvas.height = 3600;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // 高画質スケールの設定
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-        
-        // 5:6のアスペクト比に合わせて描画
         ctx.drawImage(img, 0, 0, 3000, 3600);
 
         const highResBase64 = canvas.toDataURL('image/png');
@@ -149,9 +146,15 @@ const App: React.FC = () => {
         const newCount = await usageService.incrementUsage(companyInfo.id);
         setUsageCount(newCount);
         
+        const timestamp = new Date().getTime();
+        const safeName = deceasedName.trim().replace(/[\\/:*?"<>|]/g, '');
+        const fileName = safeName 
+          ? `瞬影_${safeName}_${timestamp}.png` 
+          : `瞬影_四つ切り_${timestamp}.png`;
+
         const link = document.createElement('a');
         link.href = highResBase64;
-        link.download = `瞬影_四つ切り3000x3600_${new Date().getTime()}.png`;
+        link.download = fileName;
         link.click();
         
         setStatus({ isProcessing: false, message: '' });
@@ -165,7 +168,7 @@ const App: React.FC = () => {
       setStatus({ isProcessing: false, message: '' });
       setErrorModal({ isOpen: true, title: '保存失敗', message: '画像のダウンロード中にエラーが発生しました。' });
     }
-  }, [currentImage, usageCount, companyInfo]);
+  }, [currentImage, usageCount, companyInfo, deceasedName]);
 
   const getStep = () => {
     switch(appState) {
@@ -236,10 +239,13 @@ const App: React.FC = () => {
                         setCurrentImage(null);
                         setAppliedBg(null);
                         setAppliedClothing(null);
+                        setDeceasedName('');
                         setAppState(AppState.UPLOAD);
                       }} 
                       onStartCrop={() => setAppState(AppState.CROPPING)}
                       appliedBg={appliedBg} appliedClothing={appliedClothing} userPlan={companyInfo.plan} usageCount={usageCount}
+                      deceasedName={deceasedName}
+                      onDeceasedNameChange={setDeceasedName}
                     />
                   </div>
                 </div>

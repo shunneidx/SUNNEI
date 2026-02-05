@@ -12,6 +12,8 @@ interface ActionPanelProps {
   appliedClothing: EditAction | null;
   userPlan: UserPlan;
   usageCount: number;
+  deceasedName: string;
+  onDeceasedNameChange: (name: string) => void;
 }
 
 const ClothingThumbnail = ({ 
@@ -66,7 +68,9 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
   appliedBg,
   appliedClothing,
   userPlan,
-  usageCount
+  usageCount,
+  deceasedName,
+  onDeceasedNameChange
 }) => {
   const [selectedBg, setSelectedBg] = useState<EditAction | "">("");
   const [selectedClothing, setSelectedClothing] = useState<EditAction | "">("");
@@ -90,6 +94,57 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
 
   const limit = PLAN_LIMITS[userPlan];
   const remaining = limit === Infinity ? '無制限' : Math.max(0, limit - usageCount);
+
+  const bgItems = [
+    { 
+      action: EditAction.REMOVE_BG_BLUE, 
+      label: 'ブルー', 
+      style: { background: 'radial-gradient(circle at center, #ffffff 0%, #bfdbfe 100%)' },
+      borderClass: 'border-blue-100',
+      selectedClass: 'border-blue-500 bg-blue-50 text-blue-700',
+      hoverClass: 'hover:border-blue-300'
+    },
+    { 
+      action: EditAction.REMOVE_BG_GRAY, 
+      label: 'グレー', 
+      style: { background: 'radial-gradient(circle at center, #ffffff 0%, #d1d5db 100%)' },
+      borderClass: 'border-gray-200',
+      selectedClass: 'border-gray-500 bg-gray-50 text-gray-700',
+      hoverClass: 'hover:border-gray-400'
+    },
+    { 
+      action: EditAction.REMOVE_BG_PINK, 
+      label: 'ピンク', 
+      style: { background: 'radial-gradient(circle at center, #ffffff 0%, #fbcfe8 100%)' },
+      borderClass: 'border-pink-100',
+      selectedClass: 'border-pink-500 bg-pink-50 text-pink-700',
+      hoverClass: 'hover:border-pink-300'
+    },
+    { 
+      action: EditAction.REMOVE_BG_YELLOW, 
+      label: 'イエロー', 
+      style: { background: 'radial-gradient(circle at center, #ffffff 0%, #fef3c7 100%)' },
+      borderClass: 'border-amber-100',
+      selectedClass: 'border-amber-500 bg-amber-50 text-amber-700',
+      hoverClass: 'hover:border-amber-300'
+    },
+    { 
+      action: EditAction.REMOVE_BG_PURPLE, 
+      label: 'パープル', 
+      style: { background: 'radial-gradient(circle at center, #ffffff 0%, #e9d5ff 100%)' },
+      borderClass: 'border-purple-100',
+      selectedClass: 'border-purple-500 bg-purple-50 text-purple-700',
+      hoverClass: 'hover:border-purple-300'
+    },
+    { 
+      action: EditAction.REMOVE_BG_WHITE, 
+      label: 'ホワイト', 
+      style: { background: '#ffffff' },
+      borderClass: 'border-gray-200',
+      selectedClass: 'border-gray-400 bg-gray-50 text-gray-800',
+      hoverClass: 'hover:border-gray-300'
+    }
+  ];
 
   return (
     <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col h-full overflow-y-auto font-sans">
@@ -117,65 +172,52 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col gap-5">
+      <div className="flex-1 flex flex-col gap-6">
         
+        {/* Step 0: Deceased Name (Critical for prevention of mix-ups) */}
+        <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 space-y-2.5">
+          <div className="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-blue-600">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+            </svg>
+            <h3 className="font-bold text-blue-800 text-xs">故人様のお名前</h3>
+          </div>
+          <input 
+            type="text" 
+            value={deceasedName}
+            onChange={(e) => onDeceasedNameChange(e.target.value)}
+            placeholder="お名前を入力（ファイル名に反映）"
+            className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400 transition-all font-bold placeholder:font-normal placeholder:text-blue-300"
+          />
+          <p className="text-[9px] text-blue-500 font-medium">※ ダウンロード時の取り違え防止のため入力を推奨します</p>
+        </div>
+
         {/* Section 1: Background */}
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div className="flex items-center gap-2">
             <div className="w-5 h-5 rounded-full bg-gray-800 text-white flex items-center justify-center text-[9px] font-bold">1</div>
             <h3 className="font-bold text-gray-800 text-xs">背景を選択</h3>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            {[
-              { 
-                action: EditAction.REMOVE_BG_BLUE, 
-                label: 'ブルー', 
-                style: { background: 'radial-gradient(circle at center, #ffffff 0%, #bfdbfe 100%)' } 
-              },
-              { 
-                action: EditAction.REMOVE_BG_GRAY, 
-                label: 'グレー', 
-                style: { background: 'radial-gradient(circle at center, #ffffff 0%, #d1d5db 100%)' } 
-              },
-              { 
-                action: EditAction.REMOVE_BG_PINK, 
-                label: 'ピンク', 
-                style: { background: 'radial-gradient(circle at center, #ffffff 0%, #fbcfe8 100%)' } 
-              },
-              { 
-                action: EditAction.REMOVE_BG_YELLOW, 
-                label: 'イエロー', 
-                style: { background: 'radial-gradient(circle at center, #ffffff 0%, #fef3c7 100%)' } 
-              },
-              { 
-                action: EditAction.REMOVE_BG_PURPLE, 
-                label: 'パープル', 
-                style: { background: 'radial-gradient(circle at center, #ffffff 0%, #e9d5ff 100%)' } 
-              },
-              { 
-                action: EditAction.REMOVE_BG_WHITE, 
-                label: 'ホワイト', 
-                style: { background: '#ffffff' } 
-              }
-            ].map((item) => (
+            {bgItems.map((item) => (
               <button 
                 key={item.action}
                 type="button" 
                 onClick={() => setSelectedBg(item.action)} 
                 className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-1.5 h-24 ${
                   selectedBg === item.action 
-                  ? 'border-blue-600 bg-blue-50/50 text-blue-700 shadow-md' 
-                  : 'border-gray-100 bg-white text-gray-600 hover:border-gray-200 hover:shadow-sm'
+                  ? item.selectedClass + ' shadow-md' 
+                  : `bg-white text-gray-600 ${item.borderClass} ${item.hoverClass} hover:shadow-sm`
                 }`}
               >
                 <div 
-                  className={`w-10 h-10 rounded-full shadow-inner border border-gray-100`}
+                  className={`w-10 h-10 rounded-full shadow-inner border border-black/5`}
                   style={item.style}
                 ></div>
                 <span className="font-bold text-[11px] whitespace-nowrap">{item.label}</span>
                 {appliedBg === item.action && (
                   <div className="absolute top-1.5 right-1.5 flex items-center justify-center">
-                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                    <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white"></div>
                   </div>
                 )}
               </button>
@@ -193,7 +235,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
         </div>
 
         {/* Section 2: Clothing */}
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div className="flex items-center gap-2">
             <div className="w-5 h-5 rounded-full bg-gray-800 text-white flex items-center justify-center text-[9px] font-bold">2</div>
             <h3 className="font-bold text-gray-800 text-xs">服装を選択</h3>

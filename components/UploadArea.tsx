@@ -1,17 +1,19 @@
 
 import React, { useRef, useState } from 'react';
 import heic2any from 'heic2any';
+import { repairHeicImage } from '../services/geminiService';
 
 interface UploadAreaProps {
   onImageSelected: (base64: string) => void;
 }
 
-const MAX_IMAGE_DIMENSION = 4096; // 4K相当。印刷に十分な高画質を維持
+const MAX_IMAGE_DIMENSION = 4096;
 
 const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingMsg, setProcessingMsg] = useState("写真を解析・最適化中...");
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -21,9 +23,6 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  /**
-   * 画像をブラウザ側でリサイズし、AI処理を安定させる
-   */
   const resizeImageIfNeeded = (img: HTMLImageElement): string => {
     const canvas = document.createElement('canvas');
     let width = img.width;
@@ -54,83 +53,89 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
   const processFile = async (file: File) => {
     setWarning(null);
     setIsProcessing(true);
-    let targetFile: File | Blob = file;
+    setProcessingMsg("写真を解析・最適化中...");
+    
+    let targetDataUrl: string | null = null;
 
-    // ファイルサイズチェック (50MB)
     if (file.size > 50 * 1024 * 1024) {
-      setWarning("ファイルサイズが50MBを超えています。より小さいサイズ、またはスクリーンショットでお試しください。");
+      setWarning("ファイルサイズが50MBを超えています。");
       setIsProcessing(false);
       return;
     }
 
-    // HEIC/HEIF判定
     const fileName = file.name.toLowerCase();
-    const isHeic = fileName.endsWith('.heic') || 
-                   fileName.endsWith('.heif') ||
-                   file.type === 'image/heic' || 
-                   file.type === 'image/heif';
+    const isHeic = fileName.endsWith('.heic') || fileName.endsWith('.heif') ||
+                   file.type === 'image/heic' || file.type === 'image/heif';
 
     if (isHeic) {
       try {
-        // メモリ負荷を抑えるため、変換品質を0.4に調整（大容量HEIC対策）
-        // 公式安定版(0.0.4)を使用しつつ、低品質設定でヒープメモリを節約
+        // Step 1: Try local browser conversion
         const convertedBlob = await heic2any({
           blob: file,
           toType: 'image/jpeg',
           quality: 0.4
         });
-
-        targetFile = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+        const finalBlob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+        targetDataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(finalBlob);
+        });
       } catch (err: any) {
-        console.error("HEIC conversion error:", err);
-        let msg = "写真の読み込みに失敗しました（大容量HEIC）。";
-        msg += "\n\n【確実な解決策】";
-        msg += "\nこの写真をiPhoneで表示し、スクリーンショットを撮ってください。そのスクリーンショットをアップロードすると、正常に進むことができます。";
-        setWarning(msg);
-        setIsProcessing(false);
-        return;
+        console.warn("Local HEIC conversion failed, trying AI decoding...", err);
+        
+        // Step 2: Fallback to AI Repair
+        setProcessingMsg("最新のiPhone形式を検出しました。AIで画像を最適化しています...");
+        try {
+          const base64Heic = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          });
+          targetDataUrl = await repairHeicImage(base64Heic);
+        } catch (repairErr) {
+          console.error("AI Repair failed:", repairErr);
+          setWarning("写真の読み込みに失敗しました（最新のiPhone形式）。\n\n【解決策】写真をiPhoneで表示し、スクリーンショットを撮って、その画像をアップロードしてください。");
+          setIsProcessing(false);
+          return;
+        }
       }
+    } else {
+      // Normal images (JPEG, PNG)
+      targetDataUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
     }
 
-    const reader = new FileReader();
-    reader.onerror = () => {
-      setWarning("ファイルの読み込み中にエラーが発生しました。");
+    if (!targetDataUrl) {
+      setWarning("画像のデータ化に失敗しました。");
+      setIsProcessing(false);
+      return;
+    }
+
+    const img = new Image();
+    img.onerror = () => {
+      setWarning("画像として認識できませんでした。");
       setIsProcessing(false);
     };
 
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
-      if (!dataUrl || dataUrl === 'data:') {
-        setWarning("画像のデータ化に失敗しました。");
-        setIsProcessing(false);
-        return;
+    img.onload = () => {
+      if (img.width < 1000 || img.height < 1000) {
+        setWarning(`※ 画像サイズが小さいです（${img.width}x${img.height}px）。印刷時に粗くなる可能性があります。`);
       }
-      
-      const img = new Image();
-      img.onerror = () => {
-        setWarning("画像として認識できませんでした。別の画像をお試しください。");
+
+      try {
+        const optimizedBase64 = resizeImageIfNeeded(img);
+        onImageSelected(optimizedBase64);
+      } catch (e) {
+        setWarning("画像の最適化中にエラーが発生しました。");
+      } finally {
         setIsProcessing(false);
-      };
-
-      img.onload = () => {
-        // 低解像度警告
-        if (img.width < 1000 || img.height < 1000) {
-          setWarning(`※ 画像サイズが小さいです（${img.width}x${img.height}px）。\n印刷時に粗くなる可能性があるため、高画質な写真をお勧めします。`);
-        }
-
-        try {
-          // AI処理の安定化のため、巨大画像はリサイズ
-          const optimizedBase64 = resizeImageIfNeeded(img);
-          onImageSelected(optimizedBase64);
-        } catch (e) {
-          setWarning("画像の最適化中にエラーが発生しました。");
-        } finally {
-          setIsProcessing(false);
-        }
-      };
-      img.src = dataUrl;
+      }
     };
-    reader.readAsDataURL(targetFile);
+    img.src = targetDataUrl;
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -162,8 +167,8 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
           <div className="flex flex-col items-center gap-4">
             <div className="w-12 h-12 border-4 border-memorial-accent border-t-transparent rounded-full animate-spin"></div>
             <div>
-              <p className="text-lg font-serif text-gray-700 font-bold">写真を解析・最適化中...</p>
-              <p className="text-xs text-gray-400 mt-1">大容量ファイルの場合、数十秒かかることがあります</p>
+              <p className="text-lg font-serif text-gray-700 font-bold">{processingMsg}</p>
+              <p className="text-xs text-gray-400 mt-1">数秒から数十秒かかる場合があります</p>
             </div>
           </div>
         ) : (

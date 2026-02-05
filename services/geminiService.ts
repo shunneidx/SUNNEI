@@ -1,8 +1,10 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { EditAction } from "../types";
 
 // Standard model for image generation/editing
 const MODEL_NAME = 'gemini-2.5-flash-image';
+const REPAIR_MODEL_NAME = 'gemini-3-flash-preview';
 
 /**
  * Helper to strip the data:image/xyz;base64, prefix
@@ -43,7 +45,6 @@ const getBgPrompt = (bgAction?: EditAction): string => {
 const getClothingPrompt = (clothingAction?: EditAction): string => {
   if (!clothingAction) return "元の人物の服装をそのまま維持してください。";
 
-  // 家紋に関する共通の厳格な指示
   const kamonInstruction = "両胸の『家紋』は、白い正円の中に伝統的な紋様が描かれた日本の正式なデザインを死守してください。AIによる勝手なアレンジ、文字、数字、アルファベット、幾何学的なロゴなどの混入は絶対に禁止です。左右対称で、清潔感のある白いシンボルに固定してください。";
 
   switch (clothingAction) {
@@ -61,6 +62,44 @@ const getClothingPrompt = (clothingAction?: EditAction): string => {
 };
 
 /**
+ * Browser-side HEIC conversion fallback using Gemini
+ * For modern iPhone HEIC files that local libraries cannot decode
+ */
+export const repairHeicImage = async (base64Heic: string): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const prompt = "この画像を一切加工せず、そのままの見た目で高品質なJPEG画像として出力してください。人物の造形や画質は変更せず、単なるフォーマット変換として機能してください。";
+  
+  const imagePart = {
+    inlineData: {
+      data: cleanBase64(base64Heic),
+      mimeType: "image/heic",
+    },
+  };
+
+  try {
+    const response = await ai.models.generateContent({
+      model: REPAIR_MODEL_NAME,
+      contents: {
+        parts: [{ text: prompt }, imagePart],
+      }
+    });
+
+    const parts = response.candidates?.[0]?.content?.parts;
+    if (parts) {
+      for (const part of parts) {
+        if (part.inlineData) {
+          return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        }
+      }
+    }
+    throw new Error("AIによる画像復元に失敗しました。");
+  } catch (error) {
+    console.error("HEIC Repair Error:", error);
+    throw error;
+  }
+};
+
+/**
  * Main function to call Gemini API and process the image
  */
 export const processImage = async (
@@ -70,6 +109,9 @@ export const processImage = async (
   customInstruction?: string
 ): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  // Detect original format
+  const mimeType = base64Image.match(/data:([^;]+);/)?.[1] || "image/png";
   
   const bgText = getBgPrompt(bgAction);
   const clothText = getClothingPrompt(clothingAction);
@@ -94,7 +136,7 @@ ${customInstruction ? `3. 個別指示: 「${customInstruction}」（※人物�
   const imagePart = {
     inlineData: {
       data: cleanBase64(base64Image),
-      mimeType: "image/png",
+      mimeType: mimeType,
     },
   };
 
@@ -112,12 +154,10 @@ ${customInstruction ? `3. 個別指示: 「${customInstruction}」（※人物�
     });
 
     const candidate = response.candidates?.[0];
-    if (!candidate) {
-      throw new Error("No candidates returned from AI model.");
-    }
+    if (!candidate) throw new Error("No candidates returned from AI model.");
 
     const parts = candidate.content?.parts;
-    if (parts && parts.length > 0) {
+    if (parts) {
       for (const part of parts) {
         if (part.inlineData) {
           return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
@@ -125,7 +165,7 @@ ${customInstruction ? `3. 個別指示: 「${customInstruction}」（※人物�
       }
     }
 
-    throw new Error("Generated image part not found in the response.");
+    throw new Error("Generated image part not found.");
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     throw error;

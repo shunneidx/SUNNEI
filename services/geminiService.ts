@@ -4,7 +4,8 @@ import { EditAction } from "../types";
 
 // Standard model for image generation/editing
 const MODEL_NAME = 'gemini-2.5-flash-image';
-const REPAIR_MODEL_NAME = 'gemini-3-flash-preview';
+// Use the same image-to-image model for repair to ensure inlineData output
+const REPAIR_MODEL_NAME = 'gemini-2.5-flash-image';
 
 /**
  * Helper to strip the data:image/xyz;base64, prefix
@@ -62,12 +63,16 @@ const getClothingPrompt = (clothingAction?: EditAction): string => {
 };
 
 /**
- * Browser-side HEIC conversion fallback using Gemini
- * For modern iPhone HEIC files that local libraries cannot decode
+ * Browser-side HEIC conversion fallback using Gemini Image-to-Image
+ * Effectively acts as a cloud-based HEIF/HEVC decoder
  */
 export const repairHeicImage = async (base64Heic: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const prompt = "この画像を一切加工せず、そのままの見た目で高品質なJPEG画像として出力してください。人物の造形や画質は変更せず、単なるフォーマット変換として機能してください。";
+  
+  // Strict prompt to ensure the AI just acts as a decoder/converter
+  const prompt = `あなたは高度な画像フォーマット変換エンジンです。
+入力された画像（最新のHEIF/HEIC形式）を解析し、その見た目、人物の顔、表情、色味、構図を100%忠実に再現した高品質なJPEG画像を出力してください。
+AIによる補正やスタイルの変更は一切不要です。単なる「表示可能な画像形式への変換」としてのみ機能してください。`;
   
   const imagePart = {
     inlineData: {
@@ -81,21 +86,27 @@ export const repairHeicImage = async (base64Heic: string): Promise<string> => {
       model: REPAIR_MODEL_NAME,
       contents: {
         parts: [{ text: prompt }, imagePart],
+      },
+      config: {
+        imageConfig: {
+          aspectRatio: "3:4" // Standard memorial photo ratio
+        }
       }
     });
 
-    const parts = response.candidates?.[0]?.content?.parts;
-    if (parts) {
-      for (const part of parts) {
+    // gemini-2.5-flash-image should return inlineData in candidates[0].content.parts
+    const candidate = response.candidates?.[0];
+    if (candidate && candidate.content && candidate.content.parts) {
+      for (const part of candidate.content.parts) {
         if (part.inlineData) {
           return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
         }
       }
     }
-    throw new Error("AIによる画像復元に失敗しました。");
-  } catch (error) {
+    throw new Error("AIからの画像データ返却がありませんでした。");
+  } catch (error: any) {
     console.error("HEIC Repair Error:", error);
-    throw error;
+    throw new Error(error.message || "AIによる画像復元に失敗しました。");
   }
 };
 

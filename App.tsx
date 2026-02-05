@@ -146,11 +146,17 @@ const App: React.FC = () => {
         const newCount = await usageService.incrementUsage(companyInfo.id);
         setUsageCount(newCount);
         
-        const timestamp = new Date().getTime();
+        // 日付をYYYYMMDD形式で取得
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = (now.getMonth() + 1).toString().padStart(2, '0');
+        const d = now.getDate().toString().padStart(2, '0');
+        const dateStr = `${y}${m}${d}`;
+
         const safeName = deceasedName.trim().replace(/[\\/:*?"<>|]/g, '');
         const fileName = safeName 
-          ? `瞬影_${safeName}_${timestamp}.png` 
-          : `瞬影_四つ切り_${timestamp}.png`;
+          ? `瞬影_${safeName}_${dateStr}.png` 
+          : `瞬影_四つ切り_${dateStr}.png`;
 
         const link = document.createElement('a');
         link.href = highResBase64;

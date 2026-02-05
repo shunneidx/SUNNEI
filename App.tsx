@@ -18,7 +18,7 @@ const Logo = ({ className = "h-8" }: { className?: string }) => (
     </div>
     <div className="flex flex-col justify-center">
       <span className="text-2xl font-serif font-bold text-gray-900 tracking-wider leading-none">瞬影</span>
-      <span className="text-[10px] font-sans tracking-[0.3em] text-gray-500 uppercase mt-0.5 leading-none">SHUNNEI</span>
+      <span className="text-[12px] font-sans tracking-[0.3em] text-gray-500 uppercase mt-0.5 leading-none">SHUNNEI</span>
     </div>
   </div>
 );
@@ -198,9 +198,9 @@ const App: React.FC = () => {
                 { n: 3, label: '加工・保存' }
               ].map(s => (
                 <div key={s.n} className={`flex items-center gap-2 transition-opacity ${getStep() >= s.n ? 'opacity-100' : 'opacity-30'}`}>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${getStep() === s.n ? 'bg-gray-900 text-white' : 'bg-gray-200 text-gray-600'}`}>{s.n}</div>
-                  <span className="text-xs font-bold font-sans">{s.label}</span>
-                  {s.n < 3 && <div className="w-8 h-[1px] bg-gray-300 ml-2"></div>}
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold ${getStep() === s.n ? 'bg-gray-900 text-white' : 'bg-gray-200 text-gray-600'}`}>{s.n}</div>
+                  <span className="text-sm font-bold font-sans">{s.label}</span>
+                  {s.n < 3 && <div className="w-10 h-[1px] bg-gray-300 ml-2"></div>}
                 </div>
               ))}
             </div>
@@ -209,9 +209,9 @@ const App: React.FC = () => {
             <div className="flex items-center gap-4">
                <div className="flex flex-col items-end mr-4">
                   <div className="text-sm font-bold">{companyInfo.name}</div>
-                  <div className="text-[9px] text-blue-600 font-sans tracking-widest uppercase">{isAdminMode ? 'System Admin' : companyInfo.plan}</div>
+                  <div className="text-[11px] text-blue-600 font-sans tracking-widest uppercase">{isAdminMode ? 'System Admin' : companyInfo.plan}</div>
                </div>
-               <button onClick={() => setIsLogoutConfirmOpen(true)} className="text-xs text-gray-400 hover:text-red-600 transition-colors cursor-pointer">ログアウト</button>
+               <button onClick={() => setIsLogoutConfirmOpen(true)} className="text-sm text-gray-400 hover:text-red-600 transition-colors cursor-pointer">ログアウト</button>
             </div>
           )}
         </div>
@@ -223,16 +223,16 @@ const App: React.FC = () => {
             <>
               {appState === AppState.UPLOAD && (
                 <div className="w-full max-w-4xl animate-fade-in my-auto p-4 flex flex-col items-center">
-                  <div className="text-center mb-10 max-w-lg">
-                    <h2 className="text-3xl font-medium mb-4 text-gray-900">大切な思い出を、永遠の一枚に</h2>
-                    <p className="text-gray-500 text-sm leading-relaxed mb-8">故人様らしい自然な表情を活かしたまま、<br/>背景の変更や礼服・和装への着せ替えを数秒で行えます。</p>
+                  <div className="text-center mb-10 max-w-xl">
+                    <h2 className="text-3xl font-medium mb-6 text-gray-900">大切な思い出を、永遠の一枚に</h2>
+                    <p className="text-gray-500 text-base leading-relaxed mb-8">故人様らしい自然な表情を活かしたまま、<br/>背景の変更や礼服・和装への着せ替えを数秒で行えます。</p>
                     <UploadArea onImageSelected={handleImageSelected} />
                   </div>
                 </div>
               )}
               {appState === AppState.CROPPING && uploadedImage && <CropTool imageSrc={uploadedImage} onConfirm={handleCropConfirm} onCancel={handleCropCancel} />}
               {appState === AppState.EDITING && companyInfo && (
-                <div className="w-full max-w-7xl grid grid-cols-1 md:grid-cols-12 gap-6 p-6 h-full max-h-[90vh]">
+                <div className="w-full max-w-7xl grid grid-cols-1 md:grid-cols-12 gap-6 p-6 h-full max-h-[92vh]">
                   <div className="md:col-span-7 lg:col-span-8 flex items-center justify-center bg-gray-100 rounded-2xl p-4 overflow-hidden shadow-inner relative">
                     <PhotoCanvas imageSrc={currentImage} isLoading={status.isProcessing} loadingMessage={status.message} />
                   </div>
@@ -264,12 +264,12 @@ const App: React.FC = () => {
       {/* Logout Modal */}
       {isLogoutConfirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in font-sans">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
-            <h3 className="text-lg font-bold mb-4">ログアウトしますか？</h3>
-            <p className="text-sm text-gray-500 mb-6">編集中の内容は破棄されます。</p>
-            <div className="flex gap-3">
-              <button onClick={() => setIsLogoutConfirmOpen(false)} className="flex-1 py-3 text-gray-600 font-bold hover:bg-gray-50 rounded-lg">キャンセル</button>
-              <button onClick={executeLogout} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 shadow-md">ログアウト</button>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-8 text-center">
+            <h3 className="text-xl font-bold mb-4">ログアウトしますか？</h3>
+            <p className="text-base text-gray-500 mb-8">編集中の内容は破棄されます。</p>
+            <div className="flex gap-4">
+              <button onClick={() => setIsLogoutConfirmOpen(false)} className="flex-1 py-4 text-gray-600 font-bold hover:bg-gray-50 rounded-lg text-sm">キャンセル</button>
+              <button onClick={executeLogout} className="flex-1 py-4 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 shadow-md text-sm">ログアウト</button>
             </div>
           </div>
         </div>
@@ -278,15 +278,15 @@ const App: React.FC = () => {
       {/* Error Modal */}
       {errorModal.isOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in font-sans">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
-            <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-8 text-center">
+            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
               </svg>
             </div>
-            <h3 className="text-lg font-bold mb-2">{errorModal.title}</h3>
-            <p className="text-sm text-gray-500 mb-6">{errorModal.message}</p>
-            <button onClick={() => setErrorModal(prev => ({...prev, isOpen: false}))} className="w-full py-3 bg-gray-900 text-white font-bold rounded-lg">閉じる</button>
+            <h3 className="text-xl font-bold mb-4">{errorModal.title}</h3>
+            <p className="text-base text-gray-500 mb-8 leading-relaxed">{errorModal.message}</p>
+            <button onClick={() => setErrorModal(prev => ({...prev, isOpen: false}))} className="w-full py-4 bg-gray-900 text-white font-bold rounded-lg text-sm">閉じる</button>
           </div>
         </div>
       )}

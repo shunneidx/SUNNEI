@@ -31,7 +31,7 @@ const PhotoCanvas: React.FC<PhotoCanvasProps> = ({
           draggable={false}
         />
 
-        {/* Frame Overlap Simulation (approx 3% of area) */}
+        {/* Frame Overlap Simulation */}
         {!isLoading && (
           <div className="absolute inset-0 pointer-events-none">
             {/* Inner "Safe" zone indicator */}
@@ -43,8 +43,8 @@ const PhotoCanvas: React.FC<PhotoCanvasProps> = ({
       </div>
       
       {!isLoading && (
-        <div className="mt-2 text-center">
-          <p className="text-[10px] text-gray-400 font-sans tracking-wider">
+        <div className="mt-4 text-center">
+          <p className="text-[12px] text-gray-400 font-sans tracking-wider font-bold">
             ※薄い枠線は額縁（四つ切りサイズ）で隠れるエリアの目安です
           </p>
         </div>

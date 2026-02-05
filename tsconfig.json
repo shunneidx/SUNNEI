@@ -1,10 +1,11 @@
+
 {
   "compilerOptions": {
     "target": "ESNext",
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "module": "ESNext",
     "skipLibCheck": true,
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
@@ -15,5 +16,13 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["."]
+  "include": [
+    "index.tsx",
+    "App.tsx",
+    "types.ts",
+    "global.d.ts",
+    "components/**/*",
+    "services/**/*"
+  ],
+  "exclude": ["node_modules", "dist"]
 }

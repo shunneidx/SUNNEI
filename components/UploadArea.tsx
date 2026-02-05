@@ -9,7 +9,7 @@ interface UploadAreaProps {
 const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [warning, setWarning] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -20,29 +20,30 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
 
   const processFile = async (file: File) => {
     setWarning(null);
-    setIsProcessing(true);
-    
     let targetFile: File | Blob = file;
 
-    // Check if the file is HEIC/HEIF
+    // Check if HEIC/HEIF
     const isHeic = file.name.toLowerCase().endsWith('.heic') || 
-                   file.name.toLowerCase().endsWith('.heif') || 
+                   file.name.toLowerCase().endsWith('.heif') ||
                    file.type === 'image/heic' || 
                    file.type === 'image/heif';
 
     if (isHeic) {
+      setIsConverting(true);
       try {
-        const result = await heic2any({
+        const convertedBlob = await heic2any({
           blob: file,
           toType: 'image/jpeg',
-          quality: 0.9,
+          quality: 0.9
         });
-        targetFile = Array.isArray(result) ? result[0] : result;
+        targetFile = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
       } catch (err) {
         console.error("HEIC conversion error:", err);
-        setWarning("iPhoneの写真形式（HEIC）の変換に失敗しました。お手数ですが、通常の写真でお試しください。");
-        setIsProcessing(false);
+        setWarning("iPhoneの写真形式（HEIC）の変換に失敗しました。通常の写真でお試しください。");
+        setIsConverting(false);
         return;
+      } finally {
+        setIsConverting(false);
       }
     }
 
@@ -57,17 +58,8 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
           setWarning(`※ 画像サイズが小さいです（${img.width}x${img.height}px）。\n印刷時に粗くなる可能性があります。できるだけ高画質な写真をお使いください。`);
         }
         onImageSelected(result);
-        setIsProcessing(false);
-      };
-      img.onerror = () => {
-        setWarning("画像の読み込みに失敗しました。ファイル形式を確認してください。");
-        setIsProcessing(false);
       };
       img.src = result;
-    };
-    reader.onerror = () => {
-      setWarning("ファイルの読み取りに失敗しました。");
-      setIsProcessing(false);
     };
     reader.readAsDataURL(targetFile);
   };
@@ -75,7 +67,6 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    if (isProcessing) return;
     const file = e.dataTransfer.files?.[0];
     if (file) {
       processFile(file);
@@ -95,11 +86,11 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
     >
       <div 
         className={`relative border-2 border-dashed rounded-xl p-12 text-center transition-colors duration-300 ${
-          isProcessing ? 'border-gray-200 bg-gray-50 cursor-wait' : 
+          isConverting ? 'border-gray-300 bg-gray-50 cursor-wait' :
           warning ? 'border-amber-400 bg-amber-50 cursor-pointer' : 
           'border-gray-400 hover:border-gray-600 hover:bg-gray-50 cursor-pointer'
         }`}
-        onClick={() => !isProcessing && fileInputRef.current?.click()}
+        onClick={() => !isConverting && fileInputRef.current?.click()}
       >
         <input 
           type="file" 
@@ -109,11 +100,13 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
           onChange={handleFileChange}
         />
         
-        {isProcessing ? (
+        {isConverting ? (
           <div className="flex flex-col items-center gap-4 animate-pulse">
-            <div className="w-16 h-16 border-4 border-gray-200 border-t-gray-800 rounded-full animate-spin"></div>
-            <p className="text-lg font-serif text-gray-700">写真を処理中...</p>
-            <p className="text-xs text-gray-400">iPhoneの写真形式を変換しています</p>
+            <div className="w-12 h-12 border-4 border-gray-300 border-t-gray-800 rounded-full animate-spin"></div>
+            <div>
+              <p className="text-lg font-serif text-gray-700">写真を変換中...</p>
+              <p className="text-xs text-gray-400 mt-1">iPhone形式(HEIC)を最適化しています</p>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-4">

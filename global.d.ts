@@ -1,10 +1,11 @@
 
 declare module 'heic2any' {
-  const heic2any: any;
+  interface Heic2AnyOptions {
+    blob: Blob | File;
+    toType?: string;
+    quality?: number;
+    gifInterval?: number;
+  }
+  function heic2any(options: Heic2AnyOptions): Promise<Blob | Blob[]>;
   export default heic2any;
-}
-
-declare module 'utif' {
-  const UTIF: any;
-  export default UTIF;
 }

@@ -29,7 +29,6 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
     let width = img.width;
     let height = img.height;
 
-    // 規定サイズを超える場合のみ縮小。アスペクト比は維持
     if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
       if (width > height) {
         height = Math.round((height * MAX_IMAGE_DIMENSION) / width);
@@ -45,12 +44,10 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
     
-    // 高品質なスケーリングを有効化
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, 0, 0, width, height);
 
-    // AIへの送信に適した品質でJPEG出力
     return canvas.toDataURL('image/jpeg', 0.9);
   };
 
@@ -59,42 +56,40 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
     setIsProcessing(true);
     let targetFile: File | Blob = file;
 
+    // ファイルサイズチェック (50MB)
+    if (file.size > 50 * 1024 * 1024) {
+      setWarning("ファイルサイズが50MBを超えています。より小さいサイズ、またはスクリーンショットでお試しください。");
+      setIsProcessing(false);
+      return;
+    }
+
     // HEIC/HEIF判定
     const fileName = file.name.toLowerCase();
     const isHeic = fileName.endsWith('.heic') || 
                    fileName.endsWith('.heif') ||
                    file.type === 'image/heic' || 
-                   file.type === 'image/heif' ||
-                   (file.type === '' && (fileName.endsWith('.heic') || fileName.endsWith('.heif')));
+                   file.type === 'image/heif';
 
     if (isHeic) {
       try {
-        // multiple: false を指定してLive Photoの動画部分をスキップ
+        // メモリ負荷を抑えるため、変換品質を調整（2MB以上のHEIC対策）
+        // Live Photo対応は削除し、シンプルな変換のみを実行
         const convertedBlob = await heic2any({
           blob: file,
           toType: 'image/jpeg',
-          quality: 0.8,
-          // @ts-ignore: types may not reflect this but it's important for Live Photo
-          multiple: false
+          quality: 0.6 // 0.8から0.6に下げてメモリ消費を抑制
         });
 
         targetFile = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
       } catch (err: any) {
         console.error("HEIC conversion error:", err);
-        let msg = "iPhoneの写真形式（HEIC）の読み込みに失敗しました。";
-        msg += "\n\n【推奨される解決策】";
+        let msg = "写真の読み込みに失敗しました（大容量HEIC）。";
+        msg += "\n\n【確実な解決策】";
         msg += "\nこの写真をiPhoneで表示し、スクリーンショットを撮ってください。そのスクリーンショットをアップロードすると、正常に進むことができます。";
         setWarning(msg);
         setIsProcessing(false);
         return;
       }
-    }
-
-    // 50MBチェック（AIへの送信上限を考慮）
-    if (file.size > 50 * 1024 * 1024) {
-      setWarning("ファイルサイズが50MBを超えています。より小さいサイズ、またはスクリーンショットでお試しください。");
-      setIsProcessing(false);
-      return;
     }
 
     const reader = new FileReader();
@@ -106,14 +101,14 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
     reader.onloadend = () => {
       const dataUrl = reader.result as string;
       if (!dataUrl || dataUrl === 'data:') {
-        setWarning("画像の読み込みに失敗しました。");
+        setWarning("画像のデータ化に失敗しました。");
         setIsProcessing(false);
         return;
       }
       
       const img = new Image();
       img.onerror = () => {
-        setWarning("画像データとして正しく認識できませんでした。別の画像をお試しください。");
+        setWarning("画像として認識できませんでした。別の画像をお試しください。");
         setIsProcessing(false);
       };
 
@@ -123,13 +118,12 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
           setWarning(`※ 画像サイズが小さいです（${img.width}x${img.height}px）。\n印刷時に粗くなる可能性があるため、高画質な写真をお勧めします。`);
         }
 
-        // 大容量・大解像度対応のためのリサイズ実行
         try {
+          // AI処理の安定化のため、巨大画像はリサイズ
           const optimizedBase64 = resizeImageIfNeeded(img);
-          if (!optimizedBase64) throw new Error("Resize failed");
           onImageSelected(optimizedBase64);
         } catch (e) {
-          setWarning("画像の最適化に失敗しました。");
+          setWarning("画像の最適化中にエラーが発生しました。");
         } finally {
           setIsProcessing(false);
         }
@@ -143,9 +137,7 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
     e.preventDefault();
     e.stopPropagation();
     const file = e.dataTransfer.files?.[0];
-    if (file) {
-      processFile(file);
-    }
+    if (file) processFile(file);
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -154,11 +146,7 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
   };
 
   return (
-    <div 
-      className="w-full max-w-2xl mx-auto space-y-4"
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-    >
+    <div className="w-full max-w-2xl mx-auto space-y-4" onDrop={handleDrop} onDragOver={handleDragOver}>
       <div 
         className={`relative border-2 border-dashed rounded-xl p-12 text-center transition-all duration-300 ${
           isProcessing ? 'border-memorial-accent bg-memorial-50 cursor-wait' :
@@ -168,20 +156,14 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
         }`}
         onClick={() => !isProcessing && fileInputRef.current?.click()}
       >
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          className="hidden" 
-          accept="image/*,.heic,.heif"
-          onChange={handleFileChange}
-        />
+        <input type="file" ref={fileInputRef} className="hidden" accept="image/*,.heic,.heif" onChange={handleFileChange} />
         
         {isProcessing ? (
           <div className="flex flex-col items-center gap-4">
             <div className="w-12 h-12 border-4 border-memorial-accent border-t-transparent rounded-full animate-spin"></div>
             <div>
-              <p className="text-lg font-serif text-gray-700 font-bold">写真を最適化中...</p>
-              <p className="text-xs text-gray-400 mt-1">高品質なプリントのために画像データを解析しています</p>
+              <p className="text-lg font-serif text-gray-700 font-bold">写真を解析・最適化中...</p>
+              <p className="text-xs text-gray-400 mt-1">大容量ファイルの場合、数十秒かかることがあります</p>
             </div>
           </div>
         ) : (

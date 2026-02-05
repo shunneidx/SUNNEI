@@ -30,20 +30,18 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
       const { width, height, naturalWidth, naturalHeight } = imageRef.current;
       setImageDimensions({ width, height, naturalWidth, naturalHeight });
 
-      // Default crop: 3:4 aspect ratio, centered, 80% height
-      const initialHeight = height * 0.8;
-      const initialWidth = initialHeight * (3/4);
+      // Default crop: 1:1 aspect ratio, centered, 80% height
+      const initialSize = Math.min(width, height) * 0.8;
       
       setCrop({
-        x: (width - initialWidth) / 2,
-        y: (height - initialHeight) / 2,
-        width: initialWidth,
-        height: initialHeight
+        x: (width - initialSize) / 2,
+        y: (height - initialSize) / 2,
+        width: initialSize,
+        height: initialSize
       });
     }
   };
 
-  // Helper to handle coordinate mapping from mouse/touch to crop rect
   const getClientCoordinates = (e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent) => {
     if ('touches' in e) {
       return { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -76,7 +74,6 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
       let newX = startCrop.x + dx;
       let newY = startCrop.y + dy;
 
-      // Constrain to image bounds
       newX = Math.max(0, Math.min(newX, imageDimensions.width - crop.width));
       newY = Math.max(0, Math.min(newY, imageDimensions.height - crop.height));
 
@@ -84,27 +81,21 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
     }
 
     if (isResizing) {
-      // Maintain 3:4 aspect ratio during resize
-      let newWidth = startCrop.width + dx;
-      let newHeight = newWidth * (4/3);
+      // Maintain 1:1 aspect ratio during resize
+      let newSize = startCrop.width + dx;
 
       // Minimum size
-      if (newWidth < 100) {
-        newWidth = 100;
-        newHeight = newWidth * (4/3);
-      }
+      if (newSize < 100) newSize = 100;
 
       // Constrain to image bounds
-      if (startCrop.x + newWidth > imageDimensions.width) {
-        newWidth = imageDimensions.width - startCrop.x;
-        newHeight = newWidth * (4/3);
+      if (startCrop.x + newSize > imageDimensions.width) {
+        newSize = imageDimensions.width - startCrop.x;
       }
-      if (startCrop.y + newHeight > imageDimensions.height) {
-        newHeight = imageDimensions.height - startCrop.y;
-        newWidth = newHeight * (3/4);
+      if (startCrop.y + newSize > imageDimensions.height) {
+        newSize = imageDimensions.height - startCrop.y;
       }
 
-      setCrop(c => ({ ...c, width: newWidth, height: newHeight }));
+      setCrop(c => ({ ...c, width: newSize, height: newSize }));
     }
   }, [isDragging, isResizing, dragStart, startCrop, imageDimensions, crop.width, crop.height]);
 
@@ -135,7 +126,6 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
     const scaleX = imageDimensions.naturalWidth / imageDimensions.width;
     const scaleY = imageDimensions.naturalHeight / imageDimensions.height;
 
-    // Use a high-quality fixed size or relative to crop box
     canvas.width = crop.width * scaleX;
     canvas.height = crop.height * scaleY;
 
@@ -162,7 +152,6 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
     <div className="flex flex-col items-center justify-center h-full w-full p-4 animate-fade-in">
       <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col items-center border border-gray-100">
         
-        {/* Step Indicator */}
         <div className="flex items-center gap-3 mb-6">
           <div className="flex flex-col items-center">
             <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-md">1</div>
@@ -179,11 +168,10 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
           <h2 className="text-2xl font-bold font-serif text-gray-800">写真の範囲を調整</h2>
           <p className="text-sm text-gray-500 mt-2 leading-relaxed">
             故人様のお顔が枠の<strong>中央（上から1/3程度）</strong>に来るように調整してください。<br/>
-            枠の端をドラッグすると大きさを変更できます。
+            保存サイズは高品質な<strong>3000x3000px</strong>になります。
           </p>
         </div>
 
-        {/* Editor Area */}
         <div 
           ref={containerRef}
           className="relative overflow-hidden select-none bg-gray-900 rounded-xl shadow-2xl touch-none ring-4 ring-gray-100"
@@ -198,7 +186,6 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
             draggable={false}
           />
           
-          {/* Active Crop Area (Clean visual) */}
           <div
             className="absolute border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.7)] cursor-move touch-none"
             style={{
@@ -210,7 +197,6 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
             onMouseDown={(e) => handleMouseDown(e, 'drag')}
             onTouchStart={(e) => handleMouseDown(e, 'drag')}
           >
-             {/* Grid lines for composition rule of thirds */}
             <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none opacity-40">
                 <div className="border-r border-white/50 h-full"></div>
                 <div className="border-r border-white/50 h-full"></div>
@@ -218,7 +204,6 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
                 <div className="col-start-1 row-start-3 border-t border-white/50 w-full"></div>
             </div>
 
-            {/* Resize Handle (Bottom Right) */}
             <div
               className="absolute -bottom-3 -right-3 w-10 h-10 bg-blue-600 cursor-nwse-resize flex items-center justify-center hover:bg-blue-500 transition-all rounded-full border-4 border-white shadow-lg active:scale-90"
               onMouseDown={(e) => handleMouseDown(e, 'resize')}
@@ -229,14 +214,12 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
               </svg>
             </div>
             
-            {/* Corner Markers for visibility */}
             <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-white"></div>
             <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-white"></div>
             <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-white"></div>
           </div>
         </div>
 
-        {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-4 mt-8 w-full max-w-lg">
            <button
             onClick={onCancel}

@@ -64,14 +64,12 @@ const getClothingPrompt = (clothingAction?: EditAction): string => {
 
 /**
  * Browser-side HEIC conversion fallback using Gemini Image-to-Image
- * Effectively acts as a cloud-based HEIF/HEVC decoder
  */
 export const repairHeicImage = async (base64Heic: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // Strict prompt to ensure the AI just acts as a decoder/converter
   const prompt = `あなたは高度な画像フォーマット変換エンジンです。
-入力された画像（最新のHEIF/HEIC形式）を解析し、その見た目、人物の顔、表情、色味、構図を100%忠実に再現した高品質なJPEG画像を出力してください。
+入力された画像（最新のHEIF/HEIC形式）を解析し、その見た目、人物の顔、表情、色味、構図を100%忠実に再現した高品質な画像を出力してください。
 AIによる補正やスタイルの変更は一切不要です。単なる「表示可能な画像形式への変換」としてのみ機能してください。`;
   
   const imagePart = {
@@ -89,12 +87,11 @@ AIによる補正やスタイルの変更は一切不要です。単なる「表
       },
       config: {
         imageConfig: {
-          aspectRatio: "3:4" // Standard memorial photo ratio
+          aspectRatio: "1:1"
         }
       }
     });
 
-    // gemini-2.5-flash-image should return inlineData in candidates[0].content.parts
     const candidate = response.candidates?.[0];
     if (candidate && candidate.content && candidate.content.parts) {
       for (const part of candidate.content.parts) {
@@ -121,9 +118,7 @@ export const processImage = async (
 ): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // Detect original format
   const mimeType = base64Image.match(/data:([^;]+);/)?.[1] || "image/png";
-  
   const bgText = getBgPrompt(bgAction);
   const clothText = getClothingPrompt(clothingAction);
   
@@ -142,7 +137,7 @@ export const processImage = async (
 ${customInstruction ? `3. 個別指示: 「${customInstruction}」（※人物の造形や画質を変える指示は無効とします）` : ""}
 
 【出力】
-提供された人物の質感とスケールをそのままに、背景と服装のみを自然に合成した3:4比率の画像を出力してください。顔が変わることは失敗です。`;
+提供された人物の質感とスケールをそのままに、背景と服装のみを自然に合成した「正方形（1:1）」の画像を出力してください。顔が変わることは失敗です。`;
 
   const imagePart = {
     inlineData: {
@@ -159,7 +154,7 @@ ${customInstruction ? `3. 個別指示: 「${customInstruction}」（※人物�
       },
       config: {
         imageConfig: {
-          aspectRatio: "3:4"
+          aspectRatio: "1:1"
         }
       }
     });

@@ -123,14 +123,43 @@ const App: React.FC = () => {
       setErrorModal({ isOpen: true, title: '上限到達', message: '今月の作成可能枚数の上限に達しました。プラン変更をご検討ください。' });
       return;
     }
+
+    setStatus({ isProcessing: true, message: '四つ切りサイズ(3000px)へ最適化して保存中...' });
+
     try {
-      const newCount = await usageService.incrementUsage(companyInfo.id);
-      setUsageCount(newCount);
-      const link = document.createElement('a');
-      link.href = currentImage;
-      link.download = `瞬影_${new Date().getTime()}.png`;
-      link.click();
+      // 3000x3000pxへリサイズしてダウンロード
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 3000;
+        canvas.height = 3000;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // 高画質スケーリングの設定
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, 3000, 3000);
+
+        const highResBase64 = canvas.toDataURL('image/png');
+        
+        const newCount = await usageService.incrementUsage(companyInfo.id);
+        setUsageCount(newCount);
+        
+        const link = document.createElement('a');
+        link.href = highResBase64;
+        link.download = `瞬影_3000px_${new Date().getTime()}.png`;
+        link.click();
+        
+        setStatus({ isProcessing: false, message: '' });
+      };
+      img.onerror = () => {
+        setStatus({ isProcessing: false, message: '' });
+        setErrorModal({ isOpen: true, title: '保存失敗', message: '画像の読み込み中にエラーが発生しました。' });
+      };
+      img.src = currentImage;
     } catch (err) { 
+      setStatus({ isProcessing: false, message: '' });
       setErrorModal({ isOpen: true, title: '保存失敗', message: '画像のダウンロード中にエラーが発生しました。' });
     }
   }, [currentImage, usageCount, companyInfo]);

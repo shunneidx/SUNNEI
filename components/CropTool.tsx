@@ -14,6 +14,8 @@ interface Rect {
   height: number;
 }
 
+const ASPECT_RATIO = 5 / 6; // Width / Height for 3000x3600
+
 const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -30,14 +32,20 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
       const { width, height, naturalWidth, naturalHeight } = imageRef.current;
       setImageDimensions({ width, height, naturalWidth, naturalHeight });
 
-      // Default crop: 1:1 aspect ratio, centered, 80% height
-      const initialSize = Math.min(width, height) * 0.8;
+      // Calculate initial crop box based on 5:6 aspect ratio
+      let cropWidth = width * 0.8;
+      let cropHeight = cropWidth / ASPECT_RATIO;
+
+      if (cropHeight > height) {
+        cropHeight = height * 0.8;
+        cropWidth = cropHeight * ASPECT_RATIO;
+      }
       
       setCrop({
-        x: (width - initialSize) / 2,
-        y: (height - initialSize) / 2,
-        width: initialSize,
-        height: initialSize
+        x: (width - cropWidth) / 2,
+        y: (height - cropHeight) / 2,
+        width: cropWidth,
+        height: cropHeight
       });
     }
   };
@@ -68,9 +76,9 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
     e.preventDefault();
     const coords = getClientCoordinates(e);
     const dx = coords.x - dragStart.x;
-    const dy = coords.y - dragStart.y;
-
+    
     if (isDragging) {
+      const dy = coords.y - dragStart.y;
       let newX = startCrop.x + dx;
       let newY = startCrop.y + dy;
 
@@ -81,21 +89,27 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
     }
 
     if (isResizing) {
-      // Maintain 1:1 aspect ratio during resize
-      let newSize = startCrop.width + dx;
+      // Maintain 5:6 aspect ratio during resize
+      let newWidth = startCrop.width + dx;
+      let newHeight = newWidth / ASPECT_RATIO;
 
       // Minimum size
-      if (newSize < 100) newSize = 100;
+      if (newWidth < 100) {
+          newWidth = 100;
+          newHeight = newWidth / ASPECT_RATIO;
+      }
 
       // Constrain to image bounds
-      if (startCrop.x + newSize > imageDimensions.width) {
-        newSize = imageDimensions.width - startCrop.x;
+      if (startCrop.x + newWidth > imageDimensions.width) {
+        newWidth = imageDimensions.width - startCrop.x;
+        newHeight = newWidth / ASPECT_RATIO;
       }
-      if (startCrop.y + newSize > imageDimensions.height) {
-        newSize = imageDimensions.height - startCrop.y;
+      if (startCrop.y + newHeight > imageDimensions.height) {
+        newHeight = imageDimensions.height - startCrop.y;
+        newWidth = newHeight * ASPECT_RATIO;
       }
 
-      setCrop(c => ({ ...c, width: newSize, height: newSize }));
+      setCrop(c => ({ ...c, width: newWidth, height: newHeight }));
     }
   }, [isDragging, isResizing, dragStart, startCrop, imageDimensions, crop.width, crop.height]);
 
@@ -168,7 +182,7 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
           <h2 className="text-2xl font-bold font-serif text-gray-800">写真の範囲を調整</h2>
           <p className="text-sm text-gray-500 mt-2 leading-relaxed">
             故人様のお顔が枠の<strong>中央（上から1/3程度）</strong>に来るように調整してください。<br/>
-            保存サイズは高品質な<strong>3000x3000px</strong>になります。
+            保存サイズは四つ切り対応の<strong>3000x3600px</strong>になります。
           </p>
         </div>
 
@@ -197,6 +211,7 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
             onMouseDown={(e) => handleMouseDown(e, 'drag')}
             onTouchStart={(e) => handleMouseDown(e, 'drag')}
           >
+            {/* Grid for 5:6 aspect guidance */}
             <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none opacity-40">
                 <div className="border-r border-white/50 h-full"></div>
                 <div className="border-r border-white/50 h-full"></div>
@@ -213,10 +228,6 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25L12 21m0 0l-3.75-3.75M12 21V3" />
               </svg>
             </div>
-            
-            <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-white"></div>
-            <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-white"></div>
-            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-white"></div>
           </div>
         </div>
 

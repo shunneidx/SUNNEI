@@ -124,22 +124,25 @@ const App: React.FC = () => {
       return;
     }
 
-    setStatus({ isProcessing: true, message: '四つ切りサイズ(3000px)へ最適化して保存中...' });
+    setStatus({ isProcessing: true, message: '四つ切りサイズ(3000x3600px)へ最適化して保存中...' });
 
     try {
-      // 3000x3000pxへリサイズしてダウンロード
+      // 3000x3600pxへリサイズしてダウンロード
       const img = new Image();
       img.onload = async () => {
         const canvas = document.createElement('canvas');
+        // 四つ切りサイズ比率 (3000:3600)
         canvas.width = 3000;
-        canvas.height = 3000;
+        canvas.height = 3600;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // 高画質スケーリングの設定
+        // 高画質スケールの設定
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, 3000, 3000);
+        
+        // 5:6のアスペクト比に合わせて描画
+        ctx.drawImage(img, 0, 0, 3000, 3600);
 
         const highResBase64 = canvas.toDataURL('image/png');
         
@@ -148,7 +151,7 @@ const App: React.FC = () => {
         
         const link = document.createElement('a');
         link.href = highResBase64;
-        link.download = `瞬影_3000px_${new Date().getTime()}.png`;
+        link.download = `瞬影_四つ切り3000x3600_${new Date().getTime()}.png`;
         link.click();
         
         setStatus({ isProcessing: false, message: '' });

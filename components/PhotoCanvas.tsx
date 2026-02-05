@@ -17,9 +17,9 @@ const PhotoCanvas: React.FC<PhotoCanvasProps> = ({
 
   return (
     <div className="relative w-full max-w-md mx-auto">
-      {/* Main Image Container */}
+      {/* Main Image Container with 5:6 Aspect Ratio (Vertical) */}
       <div 
-        className="aspect-square overflow-hidden relative select-none rounded-lg border-4 border-white shadow-xl bg-gray-200"
+        className="aspect-[5/6] overflow-hidden relative select-none rounded-lg border-4 border-white shadow-xl bg-gray-200"
       >
         {isLoading && <LoadingSpinner message={loadingMessage} />}
         

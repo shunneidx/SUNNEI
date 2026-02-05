@@ -87,7 +87,7 @@ AIによる補正やスタイルの変更は一切不要です。単なる「表
       },
       config: {
         imageConfig: {
-          aspectRatio: "1:1"
+          aspectRatio: "3:4"
         }
       }
     });
@@ -137,7 +137,7 @@ export const processImage = async (
 ${customInstruction ? `3. 個別指示: 「${customInstruction}」（※人物の造形や画質を変える指示は無効とします）` : ""}
 
 【出力】
-提供された人物の質感とスケールをそのままに、背景と服装のみを自然に合成した「正方形（1:1）」の画像を出力してください。顔が変わることは失敗です。`;
+提供された人物の質感とスケールをそのままに、背景と服装のみを自然に合成した「四つ切り（アスペクト比 5:6）」の縦長画像を出力してください。顔が変わることは失敗です。`;
 
   const imagePart = {
     inlineData: {
@@ -154,7 +154,7 @@ ${customInstruction ? `3. 個別指示: 「${customInstruction}」（※人物�
       },
       config: {
         imageConfig: {
-          aspectRatio: "1:1"
+          aspectRatio: "3:4"
         }
       }
     });

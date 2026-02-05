@@ -6,89 +6,135 @@ interface UploadAreaProps {
   onImageSelected: (base64: string) => void;
 }
 
+const MAX_IMAGE_DIMENSION = 4096; // 4K相当。印刷に十分な高画質を維持
+
 const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [warning, setWarning] = useState<string | null>(null);
-  const [isConverting, setIsConverting] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       processFile(file);
     }
-    // Reset value to allow selecting same file again
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  /**
+   * 画像をブラウザ側でリサイズし、AI処理を安定させる
+   */
+  const resizeImageIfNeeded = (img: HTMLImageElement): string => {
+    const canvas = document.createElement('canvas');
+    let width = img.width;
+    let height = img.height;
+
+    // 規定サイズを超える場合のみ縮小。アスペクト比は維持
+    if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+      if (width > height) {
+        height = Math.round((height * MAX_IMAGE_DIMENSION) / width);
+        width = MAX_IMAGE_DIMENSION;
+      } else {
+        width = Math.round((width * MAX_IMAGE_DIMENSION) / height);
+        height = MAX_IMAGE_DIMENSION;
+      }
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+    
+    // 高品質なスケーリングを有効化
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, width, height);
+
+    // AIへの送信に適した品質でJPEG出力
+    return canvas.toDataURL('image/jpeg', 0.9);
   };
 
   const processFile = async (file: File) => {
     setWarning(null);
+    setIsProcessing(true);
     let targetFile: File | Blob = file;
 
-    // Check if HEIC/HEIF
-    const isHeic = file.name.toLowerCase().endsWith('.heic') || 
-                   file.name.toLowerCase().endsWith('.heif') ||
+    // HEIC/HEIF判定
+    const fileName = file.name.toLowerCase();
+    const isHeic = fileName.endsWith('.heic') || 
+                   fileName.endsWith('.heif') ||
                    file.type === 'image/heic' || 
                    file.type === 'image/heif' ||
-                   file.type === ''; // iPhone files sometimes have empty mime type in browser
+                   (file.type === '' && (fileName.endsWith('.heic') || fileName.endsWith('.heif')));
 
     if (isHeic) {
-      setIsConverting(true);
       try {
-        // heic2any conversion with robust settings
+        // multiple: false を指定してLive Photoの動画部分をスキップ
         const convertedBlob = await heic2any({
           blob: file,
           toType: 'image/jpeg',
-          quality: 0.8 // Slightly lower quality for better compatibility and performance
+          quality: 0.8,
+          // @ts-ignore: types may not reflect this but it's important for Live Photo
+          multiple: false
         });
 
-        if (Array.isArray(convertedBlob)) {
-          targetFile = convertedBlob[0];
-        } else {
-          targetFile = convertedBlob;
-        }
+        targetFile = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
       } catch (err: any) {
         console.error("HEIC conversion error:", err);
-        
-        // Detailed error feedback
-        let errorMessage = "iPhoneの写真形式（HEIC）の変換に失敗しました。";
-        if (file.size > 20 * 1024 * 1024) {
-          errorMessage += "\nファイルサイズが大きすぎる可能性があります（20MB以上）。";
-        } else {
-          errorMessage += "\nLive Photo（動く写真）設定や、特殊な撮影設定が原因の可能性があります。スクリーンショットを撮ったものを使用するか、通常の写真でお試しください。";
-        }
-        
-        setWarning(errorMessage);
-        setIsConverting(false);
+        let msg = "iPhoneの写真形式（HEIC）の読み込みに失敗しました。";
+        msg += "\n\n【推奨される解決策】";
+        msg += "\nこの写真をiPhoneで表示し、スクリーンショットを撮ってください。そのスクリーンショットをアップロードすると、正常に進むことができます。";
+        setWarning(msg);
+        setIsProcessing(false);
         return;
-      } finally {
-        setIsConverting(false);
       }
+    }
+
+    // 50MBチェック（AIへの送信上限を考慮）
+    if (file.size > 50 * 1024 * 1024) {
+      setWarning("ファイルサイズが50MBを超えています。より小さいサイズ、またはスクリーンショットでお試しください。");
+      setIsProcessing(false);
+      return;
     }
 
     const reader = new FileReader();
     reader.onerror = () => {
       setWarning("ファイルの読み込み中にエラーが発生しました。");
-      setIsConverting(false);
+      setIsProcessing(false);
     };
+
     reader.onloadend = () => {
-      const result = reader.result as string;
-      if (!result || result === 'data:') {
-        setWarning("画像のデータ化に失敗しました。ファイルが破損している可能性があります。");
+      const dataUrl = reader.result as string;
+      if (!dataUrl || dataUrl === 'data:') {
+        setWarning("画像の読み込みに失敗しました。");
+        setIsProcessing(false);
         return;
       }
       
       const img = new Image();
       img.onerror = () => {
-        setWarning("画像として認識できませんでした。有効な画像ファイルを選択してください。");
+        setWarning("画像データとして正しく認識できませんでした。別の画像をお試しください。");
+        setIsProcessing(false);
       };
+
       img.onload = () => {
-        const minSide = Math.min(img.width, img.height);
-        if (minSide < 1000) {
-          setWarning(`※ 画像サイズが小さいです（${img.width}x${img.height}px）。\n印刷時に粗くなる可能性があります。できるだけ高画質な写真をお使いください。`);
+        // 低解像度警告
+        if (img.width < 1000 || img.height < 1000) {
+          setWarning(`※ 画像サイズが小さいです（${img.width}x${img.height}px）。\n印刷時に粗くなる可能性があるため、高画質な写真をお勧めします。`);
         }
-        onImageSelected(result);
+
+        // 大容量・大解像度対応のためのリサイズ実行
+        try {
+          const optimizedBase64 = resizeImageIfNeeded(img);
+          if (!optimizedBase64) throw new Error("Resize failed");
+          onImageSelected(optimizedBase64);
+        } catch (e) {
+          setWarning("画像の最適化に失敗しました。");
+        } finally {
+          setIsProcessing(false);
+        }
       };
-      img.src = result;
+      img.src = dataUrl;
     };
     reader.readAsDataURL(targetFile);
   };
@@ -115,12 +161,12 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
     >
       <div 
         className={`relative border-2 border-dashed rounded-xl p-12 text-center transition-all duration-300 ${
-          isConverting ? 'border-memorial-accent bg-memorial-50 cursor-wait' :
-          warning?.includes('失敗') ? 'border-red-300 bg-red-50 cursor-pointer' : 
+          isProcessing ? 'border-memorial-accent bg-memorial-50 cursor-wait' :
+          warning?.includes('解決策') ? 'border-red-300 bg-red-50 cursor-pointer' : 
           warning ? 'border-amber-400 bg-amber-50 cursor-pointer' : 
           'border-gray-400 hover:border-gray-600 hover:bg-gray-50 cursor-pointer'
         }`}
-        onClick={() => !isConverting && fileInputRef.current?.click()}
+        onClick={() => !isProcessing && fileInputRef.current?.click()}
       >
         <input 
           type="file" 
@@ -130,17 +176,17 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
           onChange={handleFileChange}
         />
         
-        {isConverting ? (
+        {isProcessing ? (
           <div className="flex flex-col items-center gap-4">
             <div className="w-12 h-12 border-4 border-memorial-accent border-t-transparent rounded-full animate-spin"></div>
             <div>
               <p className="text-lg font-serif text-gray-700 font-bold">写真を最適化中...</p>
-              <p className="text-xs text-gray-400 mt-1">iPhone形式(HEIC)を高品質なJPEGに変換しています</p>
+              <p className="text-xs text-gray-400 mt-1">高品質なプリントのために画像データを解析しています</p>
             </div>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-4">
-            <div className={`p-4 rounded-full ${warning?.includes('失敗') ? 'bg-red-100 text-red-500' : warning ? 'bg-amber-100 text-amber-500' : 'bg-gray-100 text-gray-400'}`}>
+            <div className={`p-4 rounded-full ${warning?.includes('解決策') ? 'bg-red-100 text-red-500' : warning ? 'bg-amber-100 text-amber-500' : 'bg-gray-100 text-gray-400'}`}>
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10">
                 <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
               </svg>
@@ -148,20 +194,22 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
             <div>
               <p className="text-xl font-serif text-gray-700 font-bold">写真をアップロード</p>
               <p className="text-sm text-gray-500 mt-2">クリックまたはドラッグ＆ドロップ</p>
-              <p className="text-[10px] text-gray-400 mt-2 uppercase tracking-widest">Supported: JPEG, PNG, HEIC</p>
+              <p className="text-[10px] text-gray-400 mt-2 uppercase tracking-widest font-sans">最大 50MB | JPEG, PNG, HEIC形式</p>
             </div>
           </div>
         )}
       </div>
 
       {warning && (
-        <div className={`border px-4 py-3 rounded-lg flex items-start gap-3 text-sm animate-fade-in ${
-          warning.includes('失敗') ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-800'
+        <div className={`border px-5 py-4 rounded-xl flex items-start gap-4 text-sm animate-fade-in shadow-sm ${
+          warning.includes('解決策') ? 'bg-red-50 border-red-200 text-red-900' : 'bg-amber-50 border-amber-200 text-amber-900'
         }`}>
-           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-5 h-5 shrink-0 mt-0.5 ${warning.includes('失敗') ? 'text-red-500' : 'text-amber-500'}`}>
-             <path fillRule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clipRule="evenodd" />
-           </svg>
-           <div className="whitespace-pre-line leading-relaxed">{warning}</div>
+           <div className={`mt-0.5 p-1 rounded-full ${warning.includes('解決策') ? 'bg-red-200 text-red-700' : 'bg-amber-200 text-amber-700'}`}>
+             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+               <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+             </svg>
+           </div>
+           <div className="whitespace-pre-line leading-relaxed font-sans font-medium">{warning}</div>
         </div>
       )}
     </div>

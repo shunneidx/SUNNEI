@@ -72,12 +72,12 @@ const UploadArea: React.FC<UploadAreaProps> = ({ onImageSelected }) => {
 
     if (isHeic) {
       try {
-        // メモリ負荷を抑えるため、変換品質を調整（2MB以上のHEIC対策）
-        // Live Photo対応は削除し、シンプルな変換のみを実行
+        // メモリ負荷を抑えるため、変換品質を0.4に調整（大容量HEIC対策）
+        // ライブラリのバージョンアップ(0.0.5)と併せて安定性を高める
         const convertedBlob = await heic2any({
           blob: file,
           toType: 'image/jpeg',
-          quality: 0.6 // 0.8から0.6に下げてメモリ消費を抑制
+          quality: 0.4
         });
 
         targetFile = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;

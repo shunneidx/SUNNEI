@@ -30,7 +30,25 @@ const PhotoCanvas: React.FC<PhotoCanvasProps> = ({
           className="w-full h-full object-cover block"
           draggable={false}
         />
+
+        {/* Frame Overlap Simulation (approx 3% of area) */}
+        {!isLoading && (
+          <div className="absolute inset-0 pointer-events-none">
+            {/* Inner "Safe" zone indicator */}
+            <div className="absolute inset-[3%] border border-dashed border-white/30 rounded-sm"></div>
+            {/* Semi-transparent outer edge indicating frame overlap */}
+            <div className="absolute inset-0 shadow-[inset_0_0_0_12px_rgba(0,0,0,0.1)]"></div>
+          </div>
+        )}
       </div>
+      
+      {!isLoading && (
+        <div className="mt-2 text-center">
+          <p className="text-[10px] text-gray-400 font-sans tracking-wider">
+            ※薄い枠線は額縁（四つ切りサイズ）で隠れるエリアの目安です
+          </p>
+        </div>
+      )}
     </div>
   );
 };

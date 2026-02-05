@@ -181,8 +181,8 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
         <div className="text-center mb-6">
           <h2 className="text-2xl font-bold font-serif text-gray-800">写真の範囲を調整</h2>
           <p className="text-sm text-gray-500 mt-2 leading-relaxed">
-            故人様のお顔が枠の<strong>中央（上から1/3程度）</strong>に来るように調整してください。<br/>
-            保存サイズは四つ切り対応の<strong>3000x3600px</strong>になります。
+            内側の<span className="text-blue-600 font-bold">点線の範囲内</span>にお顔が収まるように調整してください。<br/>
+            ※外周約7mmは額縁の枠（かかり）で隠れます。
           </p>
         </div>
 
@@ -211,6 +211,13 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
             onMouseDown={(e) => handleMouseDown(e, 'drag')}
             onTouchStart={(e) => handleMouseDown(e, 'drag')}
           >
+            {/* Safe Area Guide (Approx 3% margin for 7mm frame overlap) */}
+            <div className="absolute inset-[3%] border border-dashed border-blue-400/80 pointer-events-none">
+              <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded-full font-bold shadow-sm">
+                額縁セーフエリア
+              </div>
+            </div>
+
             {/* Grid for 5:6 aspect guidance */}
             <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none opacity-40">
                 <div className="border-r border-white/50 h-full"></div>

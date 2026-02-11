@@ -7,7 +7,7 @@ import PhotoCanvas from './components/PhotoCanvas';
 import CropTool from './components/CropTool';
 import LoginScreen from './components/LoginScreen';
 import ManagementDashboard from './components/ManagementDashboard';
-import { processImage } from './services/geminiService';
+import { extractPerson, changeClothing } from './services/geminiService';
 import { authService, AuthSession } from './services/authService';
 import { usageService } from './services/usageService';
 
@@ -26,8 +26,10 @@ const Logo = ({ className = "h-8" }: { className?: string }) => (
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.LOGIN);
   const [isAdminMode, setIsAdminMode] = useState(false);
-  const [currentImage, setCurrentImage] = useState<string | null>(null);
-  const [originalImage, setOriginalImage] = useState<string | null>(null); 
+  
+  // レイヤー管理用ステート
+  const [originalCropped, setOriginalCropped] = useState<string | null>(null); // 背景用の元画像
+  const [personImage, setPersonImage] = useState<string | null>(null);         // 人物レイヤー（AI抽出後）
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [deceasedName, setDeceasedName] = useState<string>('');
   
@@ -71,9 +73,9 @@ const App: React.FC = () => {
   const executeLogout = useCallback(() => {
     authService.logout();
     setCompanyInfo(null);
-    setCurrentImage(null);
+    setPersonImage(null);
     setUploadedImage(null);
-    setOriginalImage(null);
+    setOriginalCropped(null);
     setDeceasedName('');
     setIsAdminMode(false);
     setAppState(AppState.LOGIN);
@@ -85,114 +87,150 @@ const App: React.FC = () => {
     setAppState(AppState.CROPPING);
   }, []);
 
-  const handleCropConfirm = useCallback((croppedImage: string) => {
-    // クロップ後の画像を「加工のベース（originalImage）」かつ「現在の表示（currentImage）」に設定
-    setOriginalImage(croppedImage);
-    setCurrentImage(croppedImage);
-    
-    // クロップが確定したタイミングで、背景・服装の適用状態をリセットする
-    // （AI加工済みの画像をクロップした場合、その結果が新たな「未加工ベース」となるため）
+  /**
+   * 1. トリミング確定
+   * 確定後、直ちにAIを呼び出して人物を抽出（セグメンテーション）する
+   */
+  const handleCropConfirm = useCallback(async (croppedImage: string) => {
+    setOriginalCropped(croppedImage);
+    setAppState(AppState.EDITING);
     setAppliedBg(null);
     setAppliedClothing(null);
-    setAppState(AppState.EDITING);
-  }, []);
 
-  const handleCropCancel = useCallback(() => {
-    setAppState(currentImage ? AppState.EDITING : AppState.UPLOAD);
-  }, [currentImage]);
-
-  const handleEditAction = useCallback(async (action: EditAction | null, customPrompt?: string) => {
-    if (!originalImage) return;
-
-    let nextBg = appliedBg;
-    let nextClothing = appliedClothing;
-
-    // アクションのタイプを判定して更新
-    const isBgAction = action === null || action.startsWith('REMOVE_BG_');
-    if (isBgAction) {
-      nextBg = action;
-    } else {
-      nextClothing = action;
-    }
-
-    // 両方が「元のまま(null)」になった場合はオリジナルを表示して終了
-    if (nextBg === null && nextClothing === null) {
-      setCurrentImage(originalImage);
-      setAppliedBg(null);
-      setAppliedClothing(null);
-      return;
-    }
-
-    setStatus({ isProcessing: true, message: '高品質な画像を生成中です。しばらくお待ちください。' });
+    setStatus({ isProcessing: true, message: '高品質なレイヤーに分離中です。' });
     try {
-      const resultImage = await processImage(originalImage, nextBg || undefined, nextClothing || undefined, customPrompt);
-      setCurrentImage(resultImage);
-      // 成功時のみ適用ステートを更新
-      if (isBgAction) setAppliedBg(action);
-      else setAppliedClothing(action);
+      // 人物抽出を実行（背景白の画像が返る）
+      const extracted = await extractPerson(croppedImage);
+      setPersonImage(extracted);
     } catch (error: any) {
-      setErrorModal({ isOpen: true, title: '生成エラー', message: '画像の処理に失敗しました。別の写真でお試しいただくか、しばらく時間を置いてから再度実行してください。' });
+      setErrorModal({ 
+        isOpen: true, 
+        title: '初期解析エラー', 
+        message: '人物の抽出に失敗しました。このまま背景変更を行いたい場合は、元の写真をご利用ください。' 
+      });
     } finally {
       setStatus({ isProcessing: false, message: '' });
     }
-  }, [originalImage, appliedBg, appliedClothing]);
+  }, []);
 
-  const handleDownload = useCallback(async () => {
-    if (!currentImage || !companyInfo) return;
-    const limit = PLAN_LIMITS[companyInfo.plan];
-    if (usageCount >= limit) {
-      setErrorModal({ isOpen: true, title: '上限到達', message: '今月の作成可能枚数の上限に達しました。プラン変更をご検討ください。' });
+  const handleCropCancel = useCallback(() => {
+    setAppState(originalCropped ? AppState.EDITING : AppState.UPLOAD);
+  }, [originalCropped]);
+
+  /**
+   * 2. 編集アクションの実行
+   * 背景変更：AIを叩かず、ステートの更新のみ（即時反映）
+   * 服装変更：AIを叩いて、人物レイヤーを更新
+   */
+  const handleEditAction = useCallback(async (action: EditAction | null) => {
+    // 背景アクションか判定
+    const isBgAction = action === null || action.startsWith('REMOVE_BG_');
+
+    if (isBgAction) {
+      // 背景変更はAIを介さずステート更新のみ
+      setAppliedBg(action);
       return;
     }
 
-    setStatus({ isProcessing: true, message: '四つ切りサイズ(3000x3600px)へ最適化して保存中...' });
+    // 服装アクションの場合（AI処理が必要）
+    if (!originalCropped) return;
+    setStatus({ isProcessing: true, message: '服装を着せ替え中です。' });
+    try {
+      const newPerson = await changeClothing(originalCropped, action);
+      setPersonImage(newPerson);
+      setAppliedClothing(action);
+    } catch (error: any) {
+      setErrorModal({ isOpen: true, title: '着せ替え失敗', message: '服装の生成に失敗しました。別の写真か、時間をおいてお試しください。' });
+    } finally {
+      setStatus({ isProcessing: false, message: '' });
+    }
+  }, [originalCropped]);
+
+  /**
+   * 3. 画像の保存
+   * レイヤー（背景色＋人物）をCanvasで1つに合成してダウンロード
+   */
+  const handleDownload = useCallback(async () => {
+    if (!originalCropped || !companyInfo) return;
+    
+    setStatus({ isProcessing: true, message: '最高画質で画像を合成・出力中...' });
 
     try {
-      const img = new Image();
-      img.onload = async () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 3000;
-        canvas.height = 3600;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = 3000;
+      canvas.height = 3600;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, 3000, 3600);
+      // 1. 背景の描画
+      if (!appliedBg) {
+        const bgImg = await loadImage(originalCropped);
+        ctx.drawImage(bgImg, 0, 0, 3000, 3600);
+      } else {
+        // 背景色の描画
+        const gradient = ctx.createRadialGradient(1500, 1800, 0, 1500, 1800, 2500);
+        switch (appliedBg) {
+          case EditAction.REMOVE_BG_BLUE: gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(1, '#bfdbfe'); break;
+          case EditAction.REMOVE_BG_GRAY: gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(1, '#d1d5db'); break;
+          case EditAction.REMOVE_BG_PINK: gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(1, '#fbcfe8'); break;
+          case EditAction.REMOVE_BG_YELLOW: gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(1, '#fef3c7'); break;
+          case EditAction.REMOVE_BG_PURPLE: gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(1, '#e9d5ff'); break;
+          case EditAction.REMOVE_BG_WHITE: ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,3000,3600); break;
+        }
+        if (appliedBg !== EditAction.REMOVE_BG_WHITE) {
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, 3000, 3600);
+        }
+      }
 
-        const highResBase64 = canvas.toDataURL('image/png');
-        
-        const newCount = await usageService.incrementUsage(companyInfo.id);
-        setUsageCount(newCount);
-        
-        const now = new Date();
-        const y = now.getFullYear();
-        const m = (now.getMonth() + 1).toString().padStart(2, '0');
-        const d = now.getDate().toString().padStart(2, '0');
-        const dateStr = `${y}${m}${d}`;
+      // 2. 人物レイヤーの描画（透過処理を含む）
+      if (personImage) {
+        const personImg = await loadImage(personImage);
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 3000;
+        tempCanvas.height = 3600;
+        const tempCtx = tempCanvas.getContext('2d');
+        if (tempCtx) {
+          tempCtx.drawImage(personImg, 0, 0, 3000, 3600);
+          const imgData = tempCtx.getImageData(0, 0, 3000, 3600);
+          const data = imgData.data;
+          for (let i = 0; i < data.length; i += 4) {
+            if (data[i] > 240 && data[i+1] > 240 && data[i+2] > 240) data[i+3] = 0;
+          }
+          tempCtx.putImageData(imgData, 0, 0);
+          ctx.drawImage(tempCanvas, 0, 0);
+        }
+      } else if (!appliedBg) {
+        // 人物レイヤーがない（＝まだ抽出が終わっていない）かつ背景色も選択していない場合は
+        // すでに背景としてoriginalCroppedを描画済みなので何もしない
+      }
 
-        const safeName = deceasedName.trim().replace(/[\\/:*?"<>|]/g, '');
-        const fileName = safeName 
-          ? `瞬影_${safeName}_${dateStr}.png` 
-          : `瞬影_四つ切り_${dateStr}.png`;
-
-        const link = document.createElement('a');
-        link.href = highResBase64;
-        link.download = fileName;
-        link.click();
-        
-        setStatus({ isProcessing: false, message: '' });
-      };
-      img.onerror = () => {
-        setStatus({ isProcessing: false, message: '' });
-        setErrorModal({ isOpen: true, title: '保存失敗', message: '画像の読み込み中にエラーが発生しました。' });
-      };
-      img.src = currentImage;
+      const highResBase64 = canvas.toDataURL('image/png');
+      
+      const newCount = await usageService.incrementUsage(companyInfo.id);
+      setUsageCount(newCount);
+      
+      const fileName = deceasedName.trim() ? `瞬影_${deceasedName}.png` : `瞬影_遺影.png`;
+      const link = document.createElement('a');
+      link.href = highResBase64;
+      link.download = fileName;
+      link.click();
+      
+      setStatus({ isProcessing: false, message: '' });
     } catch (err) { 
       setStatus({ isProcessing: false, message: '' });
-      setErrorModal({ isOpen: true, title: '保存失敗', message: '画像のダウンロード中にエラーが発生しました。' });
+      setErrorModal({ isOpen: true, title: '保存失敗', message: '画像の合成処理中にエラーが発生しました。' });
     }
-  }, [currentImage, usageCount, companyInfo, deceasedName]);
+  }, [originalCropped, personImage, appliedBg, companyInfo, deceasedName]);
+
+  const loadImage = (src: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  };
 
   const getStep = () => {
     switch(appState) {
@@ -248,26 +286,25 @@ const App: React.FC = () => {
                   </div>
                 </div>
               )}
-              {/* AppState.CROPPING 時: すでに加工済みの画像があればそれを、なければアップロード直後の画像をソースにする */}
-              {appState === AppState.CROPPING && (currentImage || uploadedImage) && (
-                <CropTool 
-                  imageSrc={currentImage || uploadedImage!} 
-                  onConfirm={handleCropConfirm} 
-                  onCancel={handleCropCancel} 
-                />
-              )}
+              {appState === AppState.CROPPING && uploadedImage && <CropTool imageSrc={uploadedImage} onConfirm={handleCropConfirm} onCancel={handleCropCancel} />}
               {appState === AppState.EDITING && companyInfo && (
                 <div className="w-full max-w-7xl grid grid-cols-1 md:grid-cols-12 gap-6 p-6 h-full max-h-[92vh]">
                   <div className="md:col-span-7 lg:col-span-8 flex items-center justify-center bg-gray-100 rounded-2xl p-4 overflow-hidden shadow-inner relative">
-                    <PhotoCanvas imageSrc={currentImage} isLoading={status.isProcessing} loadingMessage={status.message} />
+                    <PhotoCanvas 
+                      originalCropped={originalCropped} 
+                      personImage={personImage}
+                      appliedBg={appliedBg} 
+                      isLoading={status.isProcessing} 
+                      loadingMessage={status.message} 
+                    />
                   </div>
                   <div className="md:col-span-5 lg:col-span-4 h-full overflow-hidden">
                     <ActionPanel 
                       onAction={handleEditAction} disabled={status.isProcessing} onDownload={handleDownload}
                       onReset={() => {
                         setUploadedImage(null);
-                        setOriginalImage(null);
-                        setCurrentImage(null);
+                        setPersonImage(null);
+                        setOriginalCropped(null);
                         setAppliedBg(null);
                         setAppliedClothing(null);
                         setDeceasedName('');
@@ -286,12 +323,11 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Logout Modal */}
+      {/* Modals... */}
       {isLogoutConfirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in font-sans">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-8 text-center">
             <h3 className="text-xl font-bold mb-4">ログアウトしますか？</h3>
-            <p className="text-base text-gray-500 mb-8">編集中の内容は破棄されます。</p>
             <div className="flex gap-4">
               <button onClick={() => setIsLogoutConfirmOpen(false)} className="flex-1 py-4 text-gray-600 font-bold hover:bg-gray-50 rounded-lg text-sm">キャンセル</button>
               <button onClick={executeLogout} className="flex-1 py-4 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 shadow-md text-sm">ログアウト</button>
@@ -300,17 +336,11 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Error Modal */}
       {errorModal.isOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in font-sans">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-8 text-center">
-            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-              </svg>
-            </div>
             <h3 className="text-xl font-bold mb-4">{errorModal.title}</h3>
-            <p className="text-base text-gray-500 mb-8 leading-relaxed">{errorModal.message}</p>
+            <p className="text-base text-gray-500 mb-8">{errorModal.message}</p>
             <button onClick={() => setErrorModal(prev => ({...prev, isOpen: false}))} className="w-full py-4 bg-gray-900 text-white font-bold rounded-lg text-sm">閉じる</button>
           </div>
         </div>

@@ -2,14 +2,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { EditAction } from "../types";
 
-// Standard model for image generation/editing
 const MODEL_NAME = 'gemini-2.5-flash-image';
-// Use the same image-to-image model for repair to ensure inlineData output
-const REPAIR_MODEL_NAME = 'gemini-2.5-flash-image';
 
-/**
- * Helper to strip the data:image/xyz;base64, prefix
- */
 const cleanBase64 = (dataUrl: string): string => {
   if (!dataUrl.startsWith("data:")) return dataUrl;
   const commaIndex = dataUrl.indexOf(",");
@@ -17,163 +11,105 @@ const cleanBase64 = (dataUrl: string): string => {
 };
 
 /**
- * Gets specific description text for background
+ * 画像から人物のみを抽出し、背景を純白(#FFFFFF)に置き換える
  */
-const getBgPrompt = (bgAction?: EditAction): string => {
-  if (!bgAction) return "元の背景をそのまま維持してください。";
-  
-  switch (bgAction) {
-    case EditAction.REMOVE_BG_BLUE:
-      return "背景を、極めて淡く、透き通るようなパウダーブルーのグラデーションに差し替えてください。中心部はほぼ白に近い明るい水色で、周辺に向かって非常に穏やかな淡い青色へと変化する、上品で清涼感のある背景にしてください。";
-    case EditAction.REMOVE_BG_GRAY:
-      return "背景を、品位のある淡いグレーのグラデーションに差し替えてください。";
-    case EditAction.REMOVE_BG_PINK:
-      return "背景を、優しい淡いピンクのグラデーションに差し替えてください。";
-    case EditAction.REMOVE_BG_YELLOW:
-      return "背景を、温かみのある淡いイエローのグラデーションに差し替えてください。";
-    case EditAction.REMOVE_BG_PURPLE:
-      return "背景を、高貴な淡い紫のグラデーションに差し替えてください。";
-    case EditAction.REMOVE_BG_WHITE:
-      return "背景を、清潔な純白のスタジオ背景に差し替えてください。";
-    default:
-      return "元の背景をそのまま維持してください。";
-  }
-};
-
-/**
- * Gets specific description text for clothing
- */
-const getClothingPrompt = (clothingAction?: EditAction): string => {
-  if (!clothingAction) return "元の人物の服装をそのまま維持してください。";
-
-  const kamonInstruction = "両胸の『家紋』は、白い正円の中に伝統的な紋様が描かれた日本の正式なデザインを死守してください。AIによる勝手なアレンジ、文字、数字、アルファベット、幾何学的なロゴなどの混入は絶対に禁止です。左右対称で、清潔感のある白いシンボルに固定してください。";
-
-  switch (clothingAction) {
-    case EditAction.SUIT_MENS:
-      return "人物の服装を、日本の葬儀に最適な黒の礼服（シングルボタンスーツ）に差し替えてください。カメラ位置は変えず、胸から上のバストアップ構図を維持してください。白いドレスシャツに黒無地のネクタイを合わせたフォーマルなスタイルに固定してください。";
-    case EditAction.KIMONO_MENS:
-      return `人物の服装を、日本の伝統的な最高礼装である黒紋付の「羽織（はおり）」姿に差し替えてください。羽織は地紋のある黒色で、${kamonInstruction} 中央には大きな白い丸い羽織紐（ポンポン）を付け、内側には清潔な白い半襟を見せてください。下半身（袴）は絶対に描かず、元のトリミング範囲を維持してください。`;
-    case EditAction.SUIT_WOMENS:
-      return "人物の服装を、日本の女性用ブラックフォーマル（洋装）に差し替えてください。カメラ位置は変えず、胸から上のバストアップ構図を維持してください。テーラードジャケットに黒のブラウス、白いパールネックレスを合わせたスタイルに固定してください。";
-    case EditAction.KIMONO_WOMENS:
-      return `人物の服装を、日本の女性用最高礼装である『黒喪服（黒紋付）』に差し替えてください。漆黒でマットな質感の正絹の着物とし、襟元には真っ白で清潔な半襟を左右対称に美しく見せてください。${kamonInstruction} 肩のラインはなだらかで、提供された参考画像の格式高い雰囲気を完全に再現してください。帯から下の部分は描かず、元のバストアップ構図を維持してください。`;
-    default:
-      return "元の人物の服装をそのまま維持してください。";
-  }
-};
-
-/**
- * Browser-side HEIC conversion fallback using Gemini Image-to-Image
- */
-export const repairHeicImage = async (base64Heic: string): Promise<string> => {
+export const extractPerson = async (base64Image: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
-  const prompt = `あなたは高度な画像フォーマット変換エンジンです。
-入力された画像（最新のHEIF/HEIC形式）を解析し、その見た目、人物の顔、表情、色味、構図を100%忠実に再現した高品質な画像を出力してください。
-AIによる補正やスタイルの変更は一切不要です。単なる「表示可能な画像形式への変換」としてのみ機能してください。`;
-  
-  const imagePart = {
-    inlineData: {
-      data: cleanBase64(base64Heic),
-      mimeType: "image/heic",
-    },
-  };
-
-  try {
-    const response = await ai.models.generateContent({
-      model: REPAIR_MODEL_NAME,
-      contents: {
-        parts: [{ text: prompt }, imagePart],
-      },
-      config: {
-        imageConfig: {
-          aspectRatio: "3:4"
-        }
-      }
-    });
-
-    const candidate = response.candidates?.[0];
-    if (candidate && candidate.content && candidate.content.parts) {
-      for (const part of candidate.content.parts) {
-        if (part.inlineData) {
-          return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-        }
-      }
-    }
-    throw new Error("AIからの画像データ返却がありませんでした。");
-  } catch (error: any) {
-    console.error("HEIC Repair Error:", error);
-    throw new Error(error.message || "AIによる画像復元に失敗しました。");
-  }
-};
-
-/**
- * Main function to call Gemini API and process the image
- */
-export const processImage = async (
-  base64Image: string, 
-  bgAction?: EditAction, 
-  clothingAction?: EditAction,
-  customInstruction?: string
-): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
   const mimeType = base64Image.match(/data:([^;]+);/)?.[1] || "image/png";
-  const bgText = getBgPrompt(bgAction);
-  const clothText = getClothingPrompt(clothingAction);
-  
-  const prompt = `あなたは遺影写真の背景・服装の合成を専門とする技術者です。
-入力画像に対し、以下の「厳格なルール」を死守して加工を行ってください。
 
-【最優先：人物の質感と構図の維持（加工禁止）】
-1. 画質向上・鮮明化の禁止: 画像を綺麗にしたり解像度を上げたりしないでください。元の写真の「ボケ」「ノイズ」「粗さ」を人物部分において100%そのまま維持してください。
-2. 修正・改善の禁止: 肌を綺麗にする、しわを消すなどの「改善」は一切行わないでください。
-3. 同一性の絶対保持: 人物の顔、髪、表情を1ピクセルも描き直さないでください。
-4. 構図とスケールの維持: 元の画像の人物の大きさ、頭の位置、肩のラインを絶対に動かさないでください。人物を中央に配置し、上下左右に約3%の安全な余白（額縁で隠れるエリア）を意識した構図を維持してください。
+  const prompt = `あなたはプロのレタッチエンジニアです。
+入力画像から「人物（顔、髪、体、着ている服）」のみを完璧に切り抜き、背景を「純白（#FFFFFF）」に置き換えてください。
 
-【実行指示】
-1. 背景の置換: ${bgText}
-2. 服装の置換: ${clothText}
-${customInstruction ? `3. 個別指示: 「${customInstruction}」（※人物の造形や画質を変える指示は無効とします）` : ""}
+【厳格なルール】
+1. 人物の造形、表情、ライティング、ポーズ、解像度、質感（ノイズやボケ）を1ピクセルも変更しないでください。
+2. 背景は一切の影やグラデーションを排除した、完全な「#FFFFFF」の単色にしてください。
+3. 人物の境界線（髪の毛など）を非常に丁寧に処理してください。
+4. 人物の大きさ、配置を元の画像と完全に一致させてください。
 
-【出力】
-提供された人物の質感とスケールをそのままに、背景と服装のみを自然に合成した「四つ切り（アスペクト比 5:6）」の縦長画像を出力してください。人物の頭部や肩が端に寄りすぎないよう注意してください。`;
-
-  const imagePart = {
-    inlineData: {
-      data: cleanBase64(base64Image),
-      mimeType: mimeType,
-    },
-  };
+出力は、元の人物の質感を維持したまま、背景を白にした画像1枚のみとしてください。`;
 
   try {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: {
-        parts: [{ text: prompt }, imagePart],
+        parts: [{ text: prompt }, { inlineData: { data: cleanBase64(base64Image), mimeType } }],
       },
-      config: {
-        imageConfig: {
-          aspectRatio: "3:4"
-        }
-      }
+      config: { imageConfig: { aspectRatio: "3:4" } }
     });
 
-    const candidate = response.candidates?.[0];
-    if (!candidate) throw new Error("No candidates returned from AI model.");
-
-    const parts = candidate.content?.parts;
-    if (parts) {
-      for (const part of parts) {
-        if (part.inlineData) {
-          return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-        }
-      }
-    }
-
-    throw new Error("Generated image part not found.");
+    const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+    if (!part?.inlineData) throw new Error("人物の抽出に失敗しました。");
+    return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
+    console.error("Extraction Error:", error);
     throw error;
   }
+};
+
+/**
+ * 服装を着せ替え、背景を純白(#FFFFFF)にして出力する
+ */
+export const changeClothing = async (base64Image: string, action: EditAction): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const mimeType = base64Image.match(/data:([^;]+);/)?.[1] || "image/png";
+
+  let clothText = "";
+  const kamonInstruction = "両胸の家紋は白い正円の中に伝統的な紋様を描いた日本の正式なデザインに固定してください。";
+
+  switch (action) {
+    case EditAction.SUIT_MENS:
+      clothText = "黒の礼服スーツ、白いシャツ、黒い無地のネクタイ";
+      break;
+    case EditAction.KIMONO_MENS:
+      clothText = `黒紋付の羽織姿。中央に白い羽織紐、${kamonInstruction}`;
+      break;
+    case EditAction.SUIT_WOMENS:
+      clothText = "女性用ブラックフォーマル、黒のブラウス、白いパールネックレス";
+      break;
+    case EditAction.KIMONO_WOMENS:
+      clothText = `黒喪服（黒紋付）。白い半襟を美しく見せ、${kamonInstruction}`;
+      break;
+  }
+
+  const prompt = `あなたは遺影専門の着せ替えエンジニアです。
+入力画像の人物の「顔と表情」を完全に維持したまま、服装を「${clothText}」に差し替えてください。
+
+【厳格なルール】
+1. 人物の顔、髪型、表情を1ピクセルも変えないでください。
+2. 服装のみを指定されたものに描き直してください。
+3. 背景は一切の影がない完全な「純白（#FFFFFF）」にしてください。
+4. 人物の配置と大きさを元の画像と完全に一致させてください。
+
+出力は、背景を白にした加工後の画像1枚のみとしてください。`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: {
+        parts: [{ text: prompt }, { inlineData: { data: cleanBase64(base64Image), mimeType } }],
+      },
+      config: { imageConfig: { aspectRatio: "3:4" } }
+    });
+
+    const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+    if (!part?.inlineData) throw new Error("服装の着せ替えに失敗しました。");
+    return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+  } catch (error: any) {
+    console.error("Clothing Change Error:", error);
+    throw error;
+  }
+};
+
+// 互換性のためのダミー
+export const processImage = async () => "";
+export const repairHeicImage = async (base64Heic: string): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const imagePart = { inlineData: { data: cleanBase64(base64Heic), mimeType: "image/heic" } };
+    const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: { parts: [{ text: "Convert to high quality JPEG." }, imagePart] },
+        config: { imageConfig: { aspectRatio: "3:4" } }
+    });
+    const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+    return `data:${part!.inlineData!.mimeType};base64,${part!.inlineData!.data}`;
 };

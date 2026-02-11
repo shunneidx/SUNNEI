@@ -81,7 +81,6 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
   deceasedName,
   onDeceasedNameChange
 }) => {
-  // selectedBg/Clothing が "" の場合は「未選択」状態。null を明示的に「元のまま」として扱う。
   const [selectedBg, setSelectedBg] = useState<EditAction | null | "">("");
   const [selectedClothing, setSelectedClothing] = useState<EditAction | null | "">("");
   const [clothingTab, setClothingTab] = useState<'mens' | 'womens'>('mens');
@@ -91,15 +90,16 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     setSelectedClothing(appliedClothing);
   }, [appliedBg, appliedClothing]);
 
-  const handleBgAction = () => {
-    if (selectedBg !== "") onAction(selectedBg);
+  // 背景選択時は即時実行
+  const handleBgSelect = (action: EditAction | null) => {
+    setSelectedBg(action);
+    onAction(action);
   };
 
   const handleClothingAction = () => {
     if (selectedClothing !== "") onAction(selectedClothing);
   };
 
-  const isBgPending = selectedBg !== "" && selectedBg !== appliedBg;
   const isClothingPending = selectedClothing !== "" && selectedClothing !== appliedClothing;
 
   const limit = PLAN_LIMITS[userPlan];
@@ -165,18 +165,6 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     }
   ];
 
-  const getBgButtonLabel = () => {
-    if (selectedBg === "") return "背景を選択してください";
-    if (isBgPending) return "背景変更を確定する";
-    return "背景適用済み";
-  };
-
-  const getClothingButtonLabel = () => {
-    if (selectedClothing === "") return "服装を選択してください";
-    if (isClothingPending) return "服装着せ替えを実行";
-    return "服装適用済み";
-  };
-
   return (
     <div className="bg-white p-5 md:p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col h-full overflow-y-auto font-sans">
       
@@ -217,8 +205,8 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
             type="text" 
             value={deceasedName}
             onChange={(e) => onDeceasedNameChange(e.target.value)}
-            placeholder="お名前を入力（ファイル名に反映）"
-            className="w-full px-4 py-3 bg-white border border-blue-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400 transition-all font-bold placeholder:font-normal placeholder:text-blue-300 shadow-inner"
+            placeholder="ファイル名に反映"
+            className="w-full px-4 py-3 bg-white border border-blue-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400 transition-all font-bold placeholder:font-normal placeholder:text-blue-300"
           />
         </div>
 
@@ -226,14 +214,14 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-gray-800 text-white flex items-center justify-center text-[11px] font-bold">1</div>
-            <h3 className="font-bold text-gray-800 text-sm uppercase tracking-wider">背景を選択</h3>
+            <h3 className="font-bold text-gray-800 text-sm uppercase tracking-wider">背景（待ち時間なし）</h3>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {bgItems.map((item) => (
               <button 
                 key={String(item.action)}
                 type="button" 
-                onClick={() => setSelectedBg(item.action)} 
+                onClick={() => handleBgSelect(item.action)} 
                 className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 h-24 ${
                   selectedBg === item.action 
                   ? `${item.selectedClass} shadow-md` 
@@ -253,144 +241,81 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
                   ></div>
                 )}
                 <span className="font-bold text-[11px] whitespace-nowrap">{item.label}</span>
-                {appliedBg === item.action && (
-                  <div className="absolute top-1 right-1">
-                    <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white shadow-sm"></div>
-                  </div>
-                )}
               </button>
             ))}
           </div>
-          <button
-            onClick={handleBgAction}
-            disabled={disabled || !isBgPending}
-            className={`w-full py-4 font-bold rounded-lg transition-all text-sm shadow-sm active:scale-[0.98] ${
-              isBgPending ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700' : 'bg-gray-100 text-gray-400'
-            }`}
-          >
-            {getBgButtonLabel()}
-          </button>
         </div>
 
         {/* Section 2: Clothing */}
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-gray-800 text-white flex items-center justify-center text-[11px] font-bold">2</div>
-            <h3 className="font-bold text-gray-800 text-sm uppercase tracking-wider">服装を選択</h3>
+            <h3 className="font-bold text-gray-800 text-sm uppercase tracking-wider">服装着せ替え（AI処理）</h3>
           </div>
           <div className="flex flex-col gap-3">
             <div className="bg-gray-100 p-0.5 rounded-lg flex gap-1">
-              <button
-                type="button"
-                onClick={() => setClothingTab('mens')}
-                className={`flex-1 py-3 text-xs font-bold rounded-md transition-all ${
-                  clothingTab === 'mens' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-200'
-                }`}
-              >
-                男性用
-              </button>
-              <button
-                type="button"
-                onClick={() => setClothingTab('womens')}
-                className={`flex-1 py-3 text-xs font-bold rounded-md transition-all ${
-                  clothingTab === 'womens' ? 'bg-rose-500 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-200'
-                }`}
-              >
-                女性用
-              </button>
+              {['mens', 'womens'].map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setClothingTab(t as any)}
+                  className={`flex-1 py-3 text-xs font-bold rounded-md transition-all ${
+                    clothingTab === t ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-200'
+                  }`}
+                >
+                  {t === 'mens' ? '男性用' : '女性用'}
+                </button>
+              ))}
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <button onClick={() => setSelectedClothing(null)} className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 h-24 ${selectedClothing === null ? 'border-gray-900 bg-gray-50 shadow-md' : 'border-gray-100 bg-white hover:border-gray-300'}`}>
                 <ClothingThumbnail type="none" isNone={true} />
                 <span className="font-bold text-[11px] whitespace-nowrap text-gray-500">元のまま</span>
-                {appliedClothing === null && (
-                  <div className="absolute top-1 right-1">
-                    <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white shadow-sm"></div>
-                  </div>
-                )}
               </button>
               
-              {clothingTab === 'mens' ? (
-                <>
-                  <button onClick={() => setSelectedClothing(EditAction.SUIT_MENS)} className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 h-24 ${selectedClothing === EditAction.SUIT_MENS ? 'border-blue-600 bg-blue-50 shadow-md' : 'border-gray-100 bg-white hover:border-blue-200'}`}>
-                    <ClothingThumbnail type="suit" gender="mens" color="bg-gray-800" />
-                    <span className="font-bold text-[11px] whitespace-nowrap">礼服スーツ</span>
-                    {appliedClothing === EditAction.SUIT_MENS && (
-                      <div className="absolute top-1 right-1">
-                        <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white shadow-sm"></div>
-                      </div>
-                    )}
-                  </button>
-                  <button onClick={() => setSelectedClothing(EditAction.KIMONO_MENS)} className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 h-24 ${selectedClothing === EditAction.KIMONO_MENS ? 'border-blue-600 bg-blue-50 shadow-md' : 'border-gray-100 bg-white hover:border-blue-200'}`}>
-                    <ClothingThumbnail type="kimono" gender="mens" color="bg-gray-900" />
-                    <span className="font-bold text-[11px] whitespace-nowrap">和装</span>
-                    {appliedClothing === EditAction.KIMONO_MENS && (
-                      <div className="absolute top-1 right-1">
-                        <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white shadow-sm"></div>
-                      </div>
-                    )}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button onClick={() => setSelectedClothing(EditAction.SUIT_WOMENS)} className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 h-24 ${selectedClothing === EditAction.SUIT_WOMENS ? 'border-rose-500 bg-rose-50 shadow-md' : 'border-gray-100 bg-white hover:border-rose-200'}`}>
-                    <ClothingThumbnail type="suit" gender="womens" color="bg-gray-900" />
-                    <span className="font-bold text-[11px] whitespace-nowrap">洋装</span>
-                    {appliedClothing === EditAction.SUIT_WOMENS && (
-                      <div className="absolute top-1 right-1">
-                        <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white shadow-sm"></div>
-                      </div>
-                    )}
-                  </button>
-                  <button onClick={() => setSelectedClothing(EditAction.KIMONO_WOMENS)} className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 h-24 ${selectedClothing === EditAction.KIMONO_WOMENS ? 'border-rose-500 bg-rose-50 shadow-md' : 'border-gray-100 bg-white hover:border-rose-200'}`}>
-                    <ClothingThumbnail type="kimono" gender="womens" color="bg-gray-950" />
-                    <span className="font-bold text-[11px] whitespace-nowrap">和装</span>
-                    {appliedClothing === EditAction.KIMONO_WOMENS && (
-                      <div className="absolute top-1 right-1">
-                        <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white shadow-sm"></div>
-                      </div>
-                    )}
-                  </button>
-                </>
-              )}
+              {(clothingTab === 'mens' ? 
+                [{a: EditAction.SUIT_MENS, l: '礼服'}, {a: EditAction.KIMONO_MENS, l: '和装'}] : 
+                [{a: EditAction.SUIT_WOMENS, l: '洋装'}, {a: EditAction.KIMONO_WOMENS, l: '和装'}]
+              ).map(item => (
+                <button 
+                  key={item.a}
+                  onClick={() => setSelectedClothing(item.a)} 
+                  className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 h-24 ${selectedClothing === item.a ? 'border-blue-600 bg-blue-50 shadow-md' : 'border-gray-100 bg-white hover:border-blue-200'}`}
+                >
+                  <ClothingThumbnail type={item.l.includes('和装') ? 'kimono' : 'suit'} gender={clothingTab} color="bg-gray-800" />
+                  <span className="font-bold text-[11px] whitespace-nowrap">{item.l}</span>
+                  {appliedClothing === item.a && <div className="absolute top-1 right-1 w-2 h-2 bg-emerald-500 rounded-full"></div>}
+                </button>
+              ))}
             </div>
             <button
               onClick={handleClothingAction}
               disabled={disabled || !isClothingPending}
-              className={`w-full py-4 font-bold rounded-lg transition-all text-sm shadow-sm active:scale-[0.98] ${
-                isClothingPending 
-                  ? (clothingTab === 'mens' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-rose-500 text-white hover:bg-rose-600') 
-                  : 'bg-gray-100 text-gray-400'
+              className={`w-full py-4 font-bold rounded-lg transition-all text-sm shadow-sm ${
+                isClothingPending ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-400'
               }`}
             >
-              {getClothingButtonLabel()}
+              {appliedClothing === selectedClothing ? '服装適用済み' : '服装変更を実行（AI）'}
             </button>
           </div>
         </div>
 
         {/* Section 3: Final Adjustments */}
         <div className="pt-6 mt-auto border-t border-gray-100 space-y-3">
-          <p className="text-[12px] text-center text-gray-400 font-bold uppercase tracking-widest mb-1">出力・調整</p>
           <button
             onClick={onStartCrop}
             disabled={disabled}
-            className="w-full py-4 bg-white text-gray-700 border border-gray-300 font-bold rounded-lg shadow-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-[13px] active:scale-[0.98]"
+            className="w-full py-4 bg-white text-gray-700 border border-gray-300 font-bold rounded-lg shadow-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2 text-[13px]"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4 text-gray-400">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
-            </svg>
             トリミングを微調整
           </button>
           <button
             onClick={onDownload}
             disabled={disabled}
-            className="w-full py-5 bg-gray-900 text-white font-bold rounded-lg shadow-lg hover:bg-gray-800 transition-all flex items-center justify-center gap-3 disabled:opacity-50 text-sm active:scale-[0.98]"
+            className="w-full py-5 bg-gray-900 text-white font-bold rounded-lg shadow-lg hover:bg-gray-800 transition-all flex items-center justify-center gap-3 text-sm"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-            </svg>
-            画像を保存
+            画像を合成して保存
           </button>
         </div>
       </div>

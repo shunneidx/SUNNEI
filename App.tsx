@@ -86,12 +86,20 @@ const App: React.FC = () => {
   }, []);
 
   const handleCropConfirm = useCallback((croppedImage: string) => {
+    // クロップされた画像を新しい「ベース（original）」および「表示中（current）」としてセット
     setOriginalImage(croppedImage);
     setCurrentImage(croppedImage);
+    
+    // 加工済みの画像を切り取った場合、その加工は画像に「焼き込まれた」ものとし、
+    // UI上の選択状態（チェックマーク等）は一度クリアする。
+    setAppliedBg(null);
+    setAppliedClothing(null);
+    
     setAppState(AppState.EDITING);
   }, []);
 
   const handleCropCancel = useCallback(() => {
+    // 既に編集画像があるなら編集画面へ、なければアップロード画面へ戻る
     setAppState(currentImage ? AppState.EDITING : AppState.UPLOAD);
   }, [currentImage]);
 
@@ -230,7 +238,13 @@ const App: React.FC = () => {
                   </div>
                 </div>
               )}
-              {appState === AppState.CROPPING && uploadedImage && <CropTool imageSrc={uploadedImage} onConfirm={handleCropConfirm} onCancel={handleCropCancel} />}
+              {appState === AppState.CROPPING && (currentImage || uploadedImage) && (
+                <CropTool 
+                  imageSrc={currentImage || uploadedImage || ''} 
+                  onConfirm={handleCropConfirm} 
+                  onCancel={handleCropCancel} 
+                />
+              )}
               {appState === AppState.EDITING && companyInfo && (
                 <div className="w-full max-w-7xl grid grid-cols-1 md:grid-cols-12 gap-6 p-6 h-full max-h-[92vh]">
                   <div className="md:col-span-7 lg:col-span-8 flex items-center justify-center bg-gray-100 rounded-2xl p-4 overflow-hidden shadow-inner relative">

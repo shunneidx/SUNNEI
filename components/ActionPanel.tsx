@@ -77,8 +77,13 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
   const [clothingTab, setClothingTab] = useState<'mens' | 'womens'>('mens');
   
   useEffect(() => {
+    // 既に適用済みのものがあればそれを選択状態にする
     if (appliedBg) setSelectedBg(appliedBg);
     if (appliedClothing) setSelectedClothing(appliedClothing);
+    
+    // 適用済みのものが解除（null）されたら選択も外す（焼き込み後のため）
+    if (appliedBg === null) setSelectedBg("");
+    if (appliedClothing === null) setSelectedClothing("");
   }, [appliedBg, appliedClothing]);
 
   const handleBgAction = () => {
@@ -146,6 +151,18 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     }
   ];
 
+  const getBgButtonLabel = () => {
+    if (!selectedBg) return '背景を選択してください';
+    if (isBgPending) return '背景変更を確定する';
+    return '背景適用済み';
+  };
+
+  const getClothingButtonLabel = () => {
+    if (!selectedClothing) return '服装を選択してください';
+    if (isClothingPending) return '服装着せ替えを実行';
+    return '服装適用済み';
+  };
+
   return (
     <div className="bg-white p-5 md:p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col h-full overflow-y-auto font-sans">
       
@@ -161,7 +178,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
               </svg>
           </div>
-          戻る
+          最初からやり直す
         </button>
 
         <div className="bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100 text-right min-w-[90px]">
@@ -230,7 +247,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
               isBgPending ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700' : 'bg-gray-100 text-gray-400'
             }`}
           >
-            {isBgPending ? '背景変更を確定する' : '背景適用済み'}
+            {getBgButtonLabel()}
           </button>
         </div>
 
@@ -267,22 +284,22 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
                 <>
                   <button onClick={() => setSelectedClothing(EditAction.SUIT_MENS)} className={`relative p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-3 h-32 ${selectedClothing === EditAction.SUIT_MENS ? 'border-blue-600 bg-blue-50/50 shadow-md' : 'border-gray-100 bg-white hover:border-blue-200'}`}>
                     <ClothingThumbnail type="suit" gender="mens" color="bg-gray-800" />
-                    <span className="font-bold text-[12px] whitespace-nowrap">礼服（洋装）</span>
+                    <span className="font-bold text-[12px] whitespace-nowrap">礼服(スーツ)</span>
                   </button>
                   <button onClick={() => setSelectedClothing(EditAction.KIMONO_MENS)} className={`relative p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-3 h-32 ${selectedClothing === EditAction.KIMONO_MENS ? 'border-blue-600 bg-blue-50/50 shadow-md' : 'border-gray-100 bg-white hover:border-blue-200'}`}>
                     <ClothingThumbnail type="kimono" gender="mens" color="bg-gray-900" />
-                    <span className="font-bold text-[12px] whitespace-nowrap">紋付袴（和装）</span>
+                    <span className="font-bold text-[12px] whitespace-nowrap">和装</span>
                   </button>
                 </>
               ) : (
                 <>
                   <button onClick={() => setSelectedClothing(EditAction.SUIT_WOMENS)} className={`relative p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-3 h-32 ${selectedClothing === EditAction.SUIT_WOMENS ? 'border-rose-500 bg-rose-50/50 shadow-md' : 'border-gray-100 bg-white hover:border-rose-200'}`}>
                     <ClothingThumbnail type="suit" gender="womens" color="bg-gray-900" />
-                    <span className="font-bold text-[12px] whitespace-nowrap">ブラックフォーマル</span>
+                    <span className="font-bold text-[12px] whitespace-nowrap">洋装</span>
                   </button>
                   <button onClick={() => setSelectedClothing(EditAction.KIMONO_WOMENS)} className={`relative p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-3 h-32 ${selectedClothing === EditAction.KIMONO_WOMENS ? 'border-rose-500 bg-rose-50/50 shadow-md' : 'border-gray-100 bg-white hover:border-rose-200'}`}>
                     <ClothingThumbnail type="kimono" gender="womens" color="bg-gray-950" />
-                    <span className="font-bold text-[12px] whitespace-nowrap">黒喪服（和装）</span>
+                    <span className="font-bold text-[12px] whitespace-nowrap">和装</span>
                   </button>
                 </>
               )}
@@ -296,7 +313,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
                   : 'bg-gray-100 text-gray-400'
               }`}
             >
-              {isClothingPending ? '服装着せ替えを実行' : '服装適用済み'}
+              {getClothingButtonLabel()}
             </button>
           </div>
         </div>

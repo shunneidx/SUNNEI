@@ -268,22 +268,22 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
                 <>
                   <button onClick={() => setSelectedClothing(EditAction.SUIT_MENS)} className={`relative p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-3 h-32 ${selectedClothing === EditAction.SUIT_MENS ? 'border-blue-600 bg-blue-50/50 shadow-md' : 'border-gray-100 bg-white hover:border-blue-200'}`}>
                     <ClothingThumbnail type="suit" gender="mens" color="bg-gray-800" />
-                    <span className="font-bold text-[12px] whitespace-nowrap">礼服（洋装）</span>
+                    <span className="font-bold text-[12px] whitespace-nowrap">礼服(スーツ)</span>
                   </button>
                   <button onClick={() => setSelectedClothing(EditAction.KIMONO_MENS)} className={`relative p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-3 h-32 ${selectedClothing === EditAction.KIMONO_MENS ? 'border-blue-600 bg-blue-50/50 shadow-md' : 'border-gray-100 bg-white hover:border-blue-200'}`}>
                     <ClothingThumbnail type="kimono" gender="mens" color="bg-gray-900" />
-                    <span className="font-bold text-[12px] whitespace-nowrap">紋付袴（和装）</span>
+                    <span className="font-bold text-[12px] whitespace-nowrap">和装</span>
                   </button>
                 </>
               ) : (
                 <>
                   <button onClick={() => setSelectedClothing(EditAction.SUIT_WOMENS)} className={`relative p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-3 h-32 ${selectedClothing === EditAction.SUIT_WOMENS ? 'border-rose-500 bg-rose-50/50 shadow-md' : 'border-gray-100 bg-white hover:border-rose-200'}`}>
                     <ClothingThumbnail type="suit" gender="womens" color="bg-gray-900" />
-                    <span className="font-bold text-[12px] whitespace-nowrap">ブラックフォーマル</span>
+                    <span className="font-bold text-[12px] whitespace-nowrap">洋装</span>
                   </button>
                   <button onClick={() => setSelectedClothing(EditAction.KIMONO_WOMENS)} className={`relative p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-3 h-32 ${selectedClothing === EditAction.KIMONO_WOMENS ? 'border-rose-500 bg-rose-50/50 shadow-md' : 'border-gray-100 bg-white hover:border-rose-200'}`}>
                     <ClothingThumbnail type="kimono" gender="womens" color="bg-gray-950" />
-                    <span className="font-bold text-[12px] whitespace-nowrap">黒喪服（和装）</span>
+                    <span className="font-bold text-[12px] whitespace-nowrap">和装</span>
                   </button>
                 </>
               )}

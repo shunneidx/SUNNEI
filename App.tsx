@@ -86,9 +86,12 @@ const App: React.FC = () => {
   }, []);
 
   const handleCropConfirm = useCallback((croppedImage: string) => {
+    // クロップ後の画像を「加工のベース（originalImage）」かつ「現在の表示（currentImage）」に設定
     setOriginalImage(croppedImage);
     setCurrentImage(croppedImage);
-    // クロップが確定したタイミングで背景・服装の適用状態を初期化（未選択状態にする）
+    
+    // クロップが確定したタイミングで、背景・服装の適用状態をリセットする
+    // （AI加工済みの画像をクロップした場合、その結果が新たな「未加工ベース」となるため）
     setAppliedBg(null);
     setAppliedClothing(null);
     setAppState(AppState.EDITING);
@@ -101,47 +104,18 @@ const App: React.FC = () => {
   const handleEditAction = useCallback(async (action: EditAction | null, customPrompt?: string) => {
     if (!originalImage) return;
 
-    // 「元のまま」が選ばれた場合
-    if (action === null) {
-      // 背景と服装の両方が null なら、純粋なオリジナル画像に戻す
-      // どちらか一方が残る場合は processImage を呼ぶ必要がある
-      // 今回は単一セクションでの動作のため、そのセクションをリセット
-      // 実装の簡略化のため、常に applied 状態を更新して再生成
-    }
-
     let nextBg = appliedBg;
     let nextClothing = appliedClothing;
 
-    // アクションが背景か服装かを判別
+    // アクションのタイプを判定して更新
     const isBgAction = action === null || action.startsWith('REMOVE_BG_');
-    const isClothingAction = action === null || [EditAction.SUIT_MENS, EditAction.SUIT_WOMENS, EditAction.KIMONO_MENS, EditAction.KIMONO_WOMENS].includes(action);
-    
-    // 背景セクションからの操作なら nextBg を更新
-    // 注意: ここでは「どちらのセクションからの null か」を特定する必要があるが、
-    // selectedBg/Clothing のステート管理と合わせ、引数 action で上書きする
-    // 今回は ActionPanel 側で背景ボタンなら isBgAction が true になるようなロジックに依存
-    
-    // より安全な判別ロジック（暫定）:
-    // null の場合は ActionPanel のコンテキストに依存するため、
-    // ここでは単純に action を適用する。
-    // ※ 実際は onAction(null) が呼ばれる際、背景か服装かを区別するために
-    // 引数を増やすのが理想的だが、現状の EditAction の命名規則を利用する。
-    
-    // 背景と服装のどちらを変更中か、現在のステートと比較して判断
-    if (action === null) {
-      // null の場合、他方の適用状態を維持しつつ、選択された方を解除
-      // 現状、ActionPanel側で背景セクションのボタンから null が来ても判別しにくいため、
-      // handleBgAction / handleClothingAction で別々に呼ぶ形にするのが望ましいが、
-      // 簡易的に「両方の null 状態」を許容する
+    if (isBgAction) {
+      nextBg = action;
+    } else {
+      nextClothing = action;
     }
 
-    // 修正案: 引数から判別できないため、ActionPanel側から null を送る際は
-    // 背景か服装かを特定できるようステートを考慮する。
-    // ここでは単純に「選択されたアクション」で各適用ステートを上書き。
-    if (action === null || action.startsWith('REMOVE_BG_')) nextBg = action;
-    else nextClothing = action;
-
-    // 両方が null になった場合はオリジナルを表示して終了
+    // 両方が「元のまま(null)」になった場合はオリジナルを表示して終了
     if (nextBg === null && nextClothing === null) {
       setCurrentImage(originalImage);
       setAppliedBg(null);
@@ -153,7 +127,8 @@ const App: React.FC = () => {
     try {
       const resultImage = await processImage(originalImage, nextBg || undefined, nextClothing || undefined, customPrompt);
       setCurrentImage(resultImage);
-      if (action === null || action.startsWith('REMOVE_BG_')) setAppliedBg(action);
+      // 成功時のみ適用ステートを更新
+      if (isBgAction) setAppliedBg(action);
       else setAppliedClothing(action);
     } catch (error: any) {
       setErrorModal({ isOpen: true, title: '生成エラー', message: '画像の処理に失敗しました。別の写真でお試しいただくか、しばらく時間を置いてから再度実行してください。' });
@@ -190,7 +165,6 @@ const App: React.FC = () => {
         const newCount = await usageService.incrementUsage(companyInfo.id);
         setUsageCount(newCount);
         
-        // 日付をYYYYMMDD形式で取得
         const now = new Date();
         const y = now.getFullYear();
         const m = (now.getMonth() + 1).toString().padStart(2, '0');
@@ -274,7 +248,14 @@ const App: React.FC = () => {
                   </div>
                 </div>
               )}
-              {appState === AppState.CROPPING && uploadedImage && <CropTool imageSrc={uploadedImage} onConfirm={handleCropConfirm} onCancel={handleCropCancel} />}
+              {/* AppState.CROPPING 時: すでに加工済みの画像があればそれを、なければアップロード直後の画像をソースにする */}
+              {appState === AppState.CROPPING && (currentImage || uploadedImage) && (
+                <CropTool 
+                  imageSrc={currentImage || uploadedImage!} 
+                  onConfirm={handleCropConfirm} 
+                  onCancel={handleCropCancel} 
+                />
+              )}
               {appState === AppState.EDITING && companyInfo && (
                 <div className="w-full max-w-7xl grid grid-cols-1 md:grid-cols-12 gap-6 p-6 h-full max-h-[92vh]">
                   <div className="md:col-span-7 lg:col-span-8 flex items-center justify-center bg-gray-100 rounded-2xl p-4 overflow-hidden shadow-inner relative">

@@ -76,7 +76,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
   const [selectedClothing, setSelectedClothing] = useState<EditAction | "">("");
   const [clothingTab, setClothingTab] = useState<'mens' | 'womens'>('mens');
   
-  // 外部からの適用状態が変わった時（リセット含む）に選択表示を同期させる
+  // 親からの適用状態が変わった際（リセット含む）に、UI側の選択状態を同期させる
   useEffect(() => {
     setSelectedBg(appliedBg || "");
     setSelectedClothing(appliedClothing || "");

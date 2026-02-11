@@ -88,7 +88,7 @@ const App: React.FC = () => {
   const handleCropConfirm = useCallback((croppedImage: string) => {
     setOriginalImage(croppedImage);
     setCurrentImage(croppedImage);
-    // クロップが確定したタイミングで背景・服装の適用状態をリセット
+    // クロップが確定したタイミングで背景・服装の適用状態を初期化（未選択状態にする）
     setAppliedBg(null);
     setAppliedClothing(null);
     setAppState(AppState.EDITING);

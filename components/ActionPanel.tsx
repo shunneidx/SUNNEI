@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { EditAction, UserPlan, PLAN_LIMITS } from '../types';
 
 interface ActionPanelProps {
-  onAction: (action: EditAction, customPrompt?: string) => void;
+  onAction: (action: EditAction | null, customPrompt?: string) => void;
   disabled: boolean;
   onDownload: () => void;
   onReset: () => void;
@@ -20,13 +20,22 @@ const ClothingThumbnail = ({
   type, 
   gender, 
   color = "bg-gray-900", 
-  pattern = false 
+  isNone = false
 }: { 
-  type: 'suit' | 'kimono', 
-  gender: 'mens' | 'womens', 
+  type: 'suit' | 'kimono' | 'none', 
+  gender?: 'mens' | 'womens', 
   color?: string,
-  pattern?: boolean
+  isNone?: boolean
 }) => {
+  if (isNone) {
+    return (
+      <div className="w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center border border-gray-200">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-gray-400">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 17.772 17.772m0 0a10.446 10.446 0 0 1-2.863.395m2.863-.395a10.704 10.704 0 0 1-3.235-3.235" />
+        </svg>
+      </div>
+    );
+  }
   return (
     <div className={`w-14 h-14 rounded-lg ${color} relative overflow-hidden shadow-inner flex items-center justify-center border border-white/10`}>
       <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none"></div>
@@ -72,22 +81,22 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
   deceasedName,
   onDeceasedNameChange
 }) => {
-  const [selectedBg, setSelectedBg] = useState<EditAction | "">("");
-  const [selectedClothing, setSelectedClothing] = useState<EditAction | "">("");
+  // selectedBg/Clothing が "" の場合は「未選択」状態。null を明示的に「元のまま」として扱う。
+  const [selectedBg, setSelectedBg] = useState<EditAction | null | "">("");
+  const [selectedClothing, setSelectedClothing] = useState<EditAction | null | "">("");
   const [clothingTab, setClothingTab] = useState<'mens' | 'womens'>('mens');
   
-  // 親からの適用状態が変わった際（リセット含む）に、UI側の選択状態を同期させる
   useEffect(() => {
-    setSelectedBg(appliedBg || "");
-    setSelectedClothing(appliedClothing || "");
+    setSelectedBg(appliedBg);
+    setSelectedClothing(appliedClothing);
   }, [appliedBg, appliedClothing]);
 
   const handleBgAction = () => {
-    if (selectedBg) onAction(selectedBg as EditAction);
+    if (selectedBg !== "") onAction(selectedBg);
   };
 
   const handleClothingAction = () => {
-    if (selectedClothing) onAction(selectedClothing as EditAction);
+    if (selectedClothing !== "") onAction(selectedClothing);
   };
 
   const isBgPending = selectedBg !== "" && selectedBg !== appliedBg;
@@ -97,6 +106,15 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
   const remaining = limit === Infinity ? '無制限' : Math.max(0, limit - usageCount);
 
   const bgItems = [
+    { 
+      action: null, 
+      label: '元のまま', 
+      style: { background: 'white' },
+      isNone: true,
+      borderClass: 'border-gray-200',
+      selectedClass: 'border-gray-900 bg-gray-50 text-gray-900',
+      hoverClass: 'hover:border-gray-400'
+    },
     { 
       action: EditAction.REMOVE_BG_BLUE, 
       label: 'ブルー', 
@@ -147,6 +165,18 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     }
   ];
 
+  const getBgButtonLabel = () => {
+    if (selectedBg === "") return "背景を選択してください";
+    if (isBgPending) return "背景変更を確定する";
+    return "背景適用済み";
+  };
+
+  const getClothingButtonLabel = () => {
+    if (selectedClothing === "") return "服装を選択してください";
+    if (isClothingPending) return "服装着せ替えを実行";
+    return "服装適用済み";
+  };
+
   return (
     <div className="bg-white p-5 md:p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col h-full overflow-y-auto font-sans">
       
@@ -190,7 +220,6 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
             placeholder="お名前を入力（ファイル名に反映）"
             className="w-full px-4 py-3 bg-white border border-blue-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400 transition-all font-bold placeholder:font-normal placeholder:text-blue-300 shadow-inner"
           />
-          <p className="text-[11px] text-blue-500 font-medium">※ ダウンロード時の取り違え防止のため、入力をご協力ください</p>
         </div>
 
         {/* Section 1: Background */}
@@ -199,26 +228,34 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
             <div className="w-6 h-6 rounded-full bg-gray-800 text-white flex items-center justify-center text-[11px] font-bold">1</div>
             <h3 className="font-bold text-gray-800 text-sm uppercase tracking-wider">背景を選択</h3>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {bgItems.map((item) => (
               <button 
-                key={item.action}
+                key={String(item.action)}
                 type="button" 
                 onClick={() => setSelectedBg(item.action)} 
-                className={`relative p-4 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-3 h-32 ${
+                className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 h-24 ${
                   selectedBg === item.action 
                   ? `${item.selectedClass} shadow-md` 
                   : `bg-white text-gray-600 ${item.borderClass} ${item.hoverClass} hover:shadow-sm`
                 }`}
               >
-                <div 
-                  className={`w-14 h-14 rounded-full shadow-inner border border-black/5 transition-transform duration-300 ${selectedBg === item.action ? 'scale-110 shadow-lg' : ''}`}
-                  style={item.style}
-                ></div>
-                <span className="font-bold text-[13px] whitespace-nowrap">{item.label}</span>
+                {item.isNone ? (
+                  <div className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center bg-gray-50">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-gray-400">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 17.772 17.772m0 0a10.446 10.446 0 0 1-2.863.395m2.863-.395a10.704 10.704 0 0 1-3.235-3.235" />
+                    </svg>
+                  </div>
+                ) : (
+                  <div 
+                    className={`w-10 h-10 rounded-full shadow-inner border border-black/5 transition-transform duration-300 ${selectedBg === item.action ? 'scale-110 shadow-lg' : ''}`}
+                    style={item.style}
+                  ></div>
+                )}
+                <span className="font-bold text-[11px] whitespace-nowrap">{item.label}</span>
                 {appliedBg === item.action && (
-                  <div className="absolute top-2.5 right-2.5">
-                    <div className="w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-white shadow-sm"></div>
+                  <div className="absolute top-1 right-1">
+                    <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white shadow-sm"></div>
                   </div>
                 )}
               </button>
@@ -231,7 +268,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
               isBgPending ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700' : 'bg-gray-100 text-gray-400'
             }`}
           >
-            {isBgPending ? '背景変更を確定する' : '背景適用済み'}
+            {getBgButtonLabel()}
           </button>
         </div>
 
@@ -263,27 +300,57 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
+              <button onClick={() => setSelectedClothing(null)} className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 h-24 ${selectedClothing === null ? 'border-gray-900 bg-gray-50 shadow-md' : 'border-gray-100 bg-white hover:border-gray-300'}`}>
+                <ClothingThumbnail type="none" isNone={true} />
+                <span className="font-bold text-[11px] whitespace-nowrap text-gray-500">元のまま</span>
+                {appliedClothing === null && (
+                  <div className="absolute top-1 right-1">
+                    <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white shadow-sm"></div>
+                  </div>
+                )}
+              </button>
+              
               {clothingTab === 'mens' ? (
                 <>
-                  <button onClick={() => setSelectedClothing(EditAction.SUIT_MENS)} className={`relative p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-3 h-32 ${selectedClothing === EditAction.SUIT_MENS ? 'border-blue-600 bg-blue-50/50 shadow-md' : 'border-gray-100 bg-white hover:border-blue-200'}`}>
+                  <button onClick={() => setSelectedClothing(EditAction.SUIT_MENS)} className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 h-24 ${selectedClothing === EditAction.SUIT_MENS ? 'border-blue-600 bg-blue-50 shadow-md' : 'border-gray-100 bg-white hover:border-blue-200'}`}>
                     <ClothingThumbnail type="suit" gender="mens" color="bg-gray-800" />
-                    <span className="font-bold text-[12px] whitespace-nowrap">礼服(スーツ)</span>
+                    <span className="font-bold text-[11px] whitespace-nowrap">礼服スーツ</span>
+                    {appliedClothing === EditAction.SUIT_MENS && (
+                      <div className="absolute top-1 right-1">
+                        <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white shadow-sm"></div>
+                      </div>
+                    )}
                   </button>
-                  <button onClick={() => setSelectedClothing(EditAction.KIMONO_MENS)} className={`relative p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-3 h-32 ${selectedClothing === EditAction.KIMONO_MENS ? 'border-blue-600 bg-blue-50/50 shadow-md' : 'border-gray-100 bg-white hover:border-blue-200'}`}>
+                  <button onClick={() => setSelectedClothing(EditAction.KIMONO_MENS)} className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 h-24 ${selectedClothing === EditAction.KIMONO_MENS ? 'border-blue-600 bg-blue-50 shadow-md' : 'border-gray-100 bg-white hover:border-blue-200'}`}>
                     <ClothingThumbnail type="kimono" gender="mens" color="bg-gray-900" />
-                    <span className="font-bold text-[12px] whitespace-nowrap">和装</span>
+                    <span className="font-bold text-[11px] whitespace-nowrap">和装</span>
+                    {appliedClothing === EditAction.KIMONO_MENS && (
+                      <div className="absolute top-1 right-1">
+                        <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white shadow-sm"></div>
+                      </div>
+                    )}
                   </button>
                 </>
               ) : (
                 <>
-                  <button onClick={() => setSelectedClothing(EditAction.SUIT_WOMENS)} className={`relative p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-3 h-32 ${selectedClothing === EditAction.SUIT_WOMENS ? 'border-rose-500 bg-rose-50/50 shadow-md' : 'border-gray-100 bg-white hover:border-rose-200'}`}>
+                  <button onClick={() => setSelectedClothing(EditAction.SUIT_WOMENS)} className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 h-24 ${selectedClothing === EditAction.SUIT_WOMENS ? 'border-rose-500 bg-rose-50 shadow-md' : 'border-gray-100 bg-white hover:border-rose-200'}`}>
                     <ClothingThumbnail type="suit" gender="womens" color="bg-gray-900" />
-                    <span className="font-bold text-[12px] whitespace-nowrap">洋装</span>
+                    <span className="font-bold text-[11px] whitespace-nowrap">洋装</span>
+                    {appliedClothing === EditAction.SUIT_WOMENS && (
+                      <div className="absolute top-1 right-1">
+                        <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white shadow-sm"></div>
+                      </div>
+                    )}
                   </button>
-                  <button onClick={() => setSelectedClothing(EditAction.KIMONO_WOMENS)} className={`relative p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-3 h-32 ${selectedClothing === EditAction.KIMONO_WOMENS ? 'border-rose-500 bg-rose-50/50 shadow-md' : 'border-gray-100 bg-white hover:border-rose-200'}`}>
+                  <button onClick={() => setSelectedClothing(EditAction.KIMONO_WOMENS)} className={`relative p-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 h-24 ${selectedClothing === EditAction.KIMONO_WOMENS ? 'border-rose-500 bg-rose-50 shadow-md' : 'border-gray-100 bg-white hover:border-rose-200'}`}>
                     <ClothingThumbnail type="kimono" gender="womens" color="bg-gray-950" />
-                    <span className="font-bold text-[12px] whitespace-nowrap">和装</span>
+                    <span className="font-bold text-[11px] whitespace-nowrap">和装</span>
+                    {appliedClothing === EditAction.KIMONO_WOMENS && (
+                      <div className="absolute top-1 right-1">
+                        <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white shadow-sm"></div>
+                      </div>
+                    )}
                   </button>
                 </>
               )}
@@ -297,7 +364,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
                   : 'bg-gray-100 text-gray-400'
               }`}
             >
-              {isClothingPending ? '服装着せ替えを実行' : '服装適用済み'}
+              {getClothingButtonLabel()}
             </button>
           </div>
         </div>

@@ -25,9 +25,9 @@ const PhotoCanvas: React.FC<PhotoCanvasProps> = ({
     const render = async () => {
       if (!canvasRef.current || !originalCropped) return;
       
-      // プレビュー用のサイズ（解像度とパフォーマンスのバランス）
+      // 3:4のアスペクト比でプレビューサイズを計算
       const width = 800;
-      const height = 960; // 5:6
+      const height = 1066; // 800 * (4/3)
       
       await drawMemorialPhoto({
         canvas: canvasRef.current,
@@ -48,11 +48,10 @@ const PhotoCanvas: React.FC<PhotoCanvasProps> = ({
   return (
     <div className="relative w-full max-w-md mx-auto">
       <div 
-        className="aspect-[5/6] overflow-hidden relative select-none rounded-lg border-4 border-white shadow-xl bg-gray-200"
+        className="aspect-[3/4] overflow-hidden relative select-none rounded-lg border-4 border-white shadow-xl bg-gray-200"
       >
         {isLoading && <LoadingSpinner message={loadingMessage} />}
         
-        {/* メインCanvas */}
         <canvas 
           ref={canvasRef}
           className="w-full h-full object-contain block"
@@ -62,7 +61,7 @@ const PhotoCanvas: React.FC<PhotoCanvasProps> = ({
       {!isLoading && (
         <div className="mt-4 text-center">
           <p className="text-[12px] text-gray-400 font-sans tracking-wider font-bold">
-            ※画面に表示されている通りの品質で保存されます
+            ※アスペクト比 3:4 で保存されます
           </p>
         </div>
       )}

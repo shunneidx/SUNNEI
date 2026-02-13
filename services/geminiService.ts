@@ -11,22 +11,22 @@ const cleanBase64 = (dataUrl: string): string => {
 };
 
 /**
- * 画像から人物のみを抽出し、背景を純白(#FFFFFF)に置き換える
+ * 画像から人物のみを抽出し、背景をクロマキー用の「鮮やかな緑色(#00FF00)」に置き換える
  */
 export const extractPerson = async (base64Image: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const mimeType = base64Image.match(/data:([^;]+);/)?.[1] || "image/png";
 
-  const prompt = `あなたはプロのレタッチエンジニアです。
-入力画像から「人物（顔、髪、体、着ている服）」のみを完璧に切り抜き、背景を「純白（#FFFFFF）」に置き換えてください。
+  const prompt = `あなたは世界最高峰のフォトレタッチャーです。
+入力画像から人物を完璧に分離し、背景をクロマキー合成用の「鮮やかな緑色 (#00FF00)」に置き換えてください。
 
-【厳格なルール】
-1. 人物の造形、表情、ライティング、ポーズ、解像度、質感（ノイズやボケ）を1ピクセルも変更しないでください。
-2. 背景は一切の影やグラデーションを排除した、完全な「#FFFFFF」の単色にしてください。
-3. 人物の境界線（髪の毛など）を非常に丁寧に処理してください。
-4. 人物の大きさ、配置を元の画像と完全に一致させてください。
+【厳格な遵守事項】
+1. 人物の造形、顔、表情、髪型、服装の質感、ライティングを1%も変更しないでください。
+2. 背景は影やムラの一切ない、完全な単色「#00FF00」のみで構成してください。
+3. 髪の毛1本1本まで丁寧に境界線を処理し、グリーンの背景と明確に区別できるようにしてください。
+4. 人物のポーズ、大きさ、配置を元の画像から一切変えないでください（アスペクト比 3:4 を維持）。
 
-出力は、元の人物の質感を維持したまま、背景を白にした画像1枚のみとしてください。`;
+出力は、背景をグリーンにした画像1枚のみとしてください。`;
 
   try {
     const response = await ai.models.generateContent({
@@ -47,7 +47,7 @@ export const extractPerson = async (base64Image: string): Promise<string> => {
 };
 
 /**
- * 服装を着せ替え、背景を純白(#FFFFFF)にして出力する
+ * 服装を着せ替え、背景を鮮やかな緑色(#00FF00)にして出力する
  */
 export const changeClothing = async (base64Image: string, action: EditAction): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -72,15 +72,15 @@ export const changeClothing = async (base64Image: string, action: EditAction): P
   }
 
   const prompt = `あなたは遺影専門の着せ替えエンジニアです。
-入力画像の人物の「顔と表情」を完全に維持したまま、服装を「${clothText}」に差し替えてください。
+人物の「顔と表情」を完全に維持したまま、服装を「${clothText}」に差し替えてください。
 
 【厳格なルール】
-1. 人物の顔、髪型、表情を1ピクセルも変えないでください。
-2. 服装のみを指定されたものに描き直してください。
-3. 背景は一切の影がない完全な「純白（#FFFFFF）」にしてください。
-4. 人物の配置と大きさを元の画像と完全に一致させてください。
+1. 人物の顔、髪型、表情を1ピクセルも変えないでください。元の人物そのものであることが最優先です。
+2. 服装のみを指示通りに描き直してください。
+3. 背景はクロマキー合成用の「鮮やかな緑色 (#00FF00)」にしてください。
+4. 人物の配置と大きさを元の画像と完全に一致させ、アスペクト比 3:4 を守ってください。
 
-出力は、背景を白にした加工後の画像1枚のみとしてください。`;
+出力は、背景をグリーンにした加工画像1枚のみとしてください。`;
 
   try {
     const response = await ai.models.generateContent({
@@ -100,14 +100,12 @@ export const changeClothing = async (base64Image: string, action: EditAction): P
   }
 };
 
-// 互換性のためのダミー
-export const processImage = async () => "";
 export const repairHeicImage = async (base64Heic: string): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const imagePart = { inlineData: { data: cleanBase64(base64Heic), mimeType: "image/heic" } };
     const response = await ai.models.generateContent({
         model: MODEL_NAME,
-        contents: { parts: [{ text: "Convert to high quality JPEG." }, imagePart] },
+        contents: { parts: [{ text: "Convert to high quality JPEG 3:4." }, imagePart] },
         config: { imageConfig: { aspectRatio: "3:4" } }
     });
     const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);

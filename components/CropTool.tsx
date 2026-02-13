@@ -14,15 +14,16 @@ interface Rect {
   height: number;
 }
 
-const ASPECT_RATIO = 5 / 6; // Width / Height (遺影標準：四つ切りサイズ相当)
+const ASPECT_RATIO = 5 / 6; // 遺影標準：四つ切りサイズ相当
 
 const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
-  const [crop, setCrop] = useState<Rect>({ x: 0, y: 0, width: 0, height: 0 });
+  
+  // 状態管理：ピクセル単位ではなく「コンテナに対する割合(0-1)」で保持することでズレを防ぐ
+  const [crop, setCrop] = useState<Rect>({ x: 0.15, y: 0.1, width: 0.7, height: 0.84 });
   const [rotation, setRotation] = useState<number>(0);
   const [isRotating, setIsRotating] = useState<boolean>(false);
-  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0, naturalWidth: 0, naturalHeight: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -30,23 +31,24 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
 
   const onImageLoad = () => {
     if (imageRef.current && containerRef.current) {
-      const { width, height, naturalWidth, naturalHeight } = imageRef.current;
-      setImageDimensions({ width, height, naturalWidth, naturalHeight });
+      const { naturalWidth, naturalHeight } = imageRef.current;
+      const containerW = containerRef.current.clientWidth;
+      const containerH = containerRef.current.clientHeight;
 
-      // 初期切り抜き枠の計算（画面中央に5:6で配置）
-      let cropWidth = width * 0.7;
-      let cropHeight = cropWidth / ASPECT_RATIO;
+      // 初期配置の最適化
+      let initialW = 0.6;
+      let initialH = (containerW * initialW / ASPECT_RATIO) / containerH;
 
-      if (cropHeight > height * 0.8) {
-        cropHeight = height * 0.8;
-        cropWidth = cropHeight * ASPECT_RATIO;
+      if (initialH > 0.8) {
+        initialH = 0.8;
+        initialW = (containerH * initialH * ASPECT_RATIO) / containerW;
       }
-      
+
       setCrop({
-        x: (width - cropWidth) / 2,
-        y: (height - cropHeight) / 2,
-        width: cropWidth,
-        height: cropHeight
+        x: (1 - initialW) / 2,
+        y: (1 - initialH) / 2,
+        width: initialW,
+        height: initialH
       });
     }
   };
@@ -59,9 +61,6 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
   };
 
   const handleMouseDown = (e: React.MouseEvent | React.TouchEvent, action: 'drag' | 'resize') => {
-    e.preventDefault();
-    e.stopPropagation();
-    
     const coords = getClientCoordinates(e);
     setDragStart(coords);
     setStartCrop({ ...crop });
@@ -72,46 +71,42 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
 
   const handleMouseMove = useCallback((e: MouseEvent | TouchEvent) => {
     if (!isDragging && !isResizing) return;
-    if (!containerRef.current || !imageDimensions.width) return;
+    if (!containerRef.current) return;
 
-    e.preventDefault();
     const coords = getClientCoordinates(e);
-    const dx = coords.x - dragStart.x;
-    const dy = coords.y - dragStart.y;
+    const containerW = containerRef.current.clientWidth;
+    const containerH = containerRef.current.clientHeight;
+    
+    // 移動量を割合(0.0 - 1.0)に変換
+    const dx = (coords.x - dragStart.x) / containerW;
+    const dy = (coords.y - dragStart.y) / containerH;
     
     if (isDragging) {
-      let newX = startCrop.x + dx;
-      let newY = startCrop.y + dy;
-
-      newX = Math.max(0, Math.min(newX, imageDimensions.width - crop.width));
-      newY = Math.max(0, Math.min(newY, imageDimensions.height - crop.height));
-
-      setCrop(c => ({ ...c, x: newX, y: newY }));
+      setCrop({
+        ...startCrop,
+        x: Math.max(0, Math.min(startCrop.x + dx, 1 - startCrop.width)),
+        y: Math.max(0, Math.min(startCrop.y + dy, 1 - startCrop.height))
+      });
     }
 
     if (isResizing) {
-      let newWidth = startCrop.width + dx;
-      let newHeight = newWidth / ASPECT_RATIO;
+      let newWidth = Math.max(0.1, startCrop.width + dx);
+      // アスペクト比を維持した高さをコンテナの割合で計算
+      let newHeight = (newWidth * containerW / ASPECT_RATIO) / containerH;
 
-      // 最小サイズ制限
-      if (newWidth < 100) {
-          newWidth = 100;
-          newHeight = newWidth / ASPECT_RATIO;
+      // コンテナ境界制限
+      if (startCrop.x + newWidth > 1) {
+        newWidth = 1 - startCrop.x;
+        newHeight = (newWidth * containerW / ASPECT_RATIO) / containerH;
       }
-
-      // 境界制限
-      if (startCrop.x + newWidth > imageDimensions.width) {
-        newWidth = imageDimensions.width - startCrop.x;
-        newHeight = newWidth / ASPECT_RATIO;
-      }
-      if (startCrop.y + newHeight > imageDimensions.height) {
-        newHeight = imageDimensions.height - startCrop.y;
-        newWidth = newHeight * ASPECT_RATIO;
+      if (startCrop.y + newHeight > 1) {
+        newHeight = 1 - startCrop.y;
+        newWidth = (newHeight * containerH * ASPECT_RATIO) / containerW;
       }
 
       setCrop(c => ({ ...c, width: newWidth, height: newHeight }));
     }
-  }, [isDragging, isResizing, dragStart, startCrop, imageDimensions, crop.width, crop.height]);
+  }, [isDragging, isResizing, dragStart, startCrop]);
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
@@ -120,7 +115,7 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
 
   useEffect(() => {
     if (isDragging || isResizing) {
-      window.addEventListener('mousemove', handleMouseMove, { passive: false });
+      window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('touchmove', handleMouseMove, { passive: false });
       window.addEventListener('mouseup', handleMouseUp);
       window.addEventListener('touchend', handleMouseUp);
@@ -134,61 +129,71 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
   }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
 
   /**
-   * 枠通りの精密な切り抜きを実行
+   * 精密な切り抜き実行
+   * プレビュー(CSS)の挙動をCanvasで数学的に完全に再現する
    */
   const executeCrop = () => {
-    if (!imageRef.current) return;
+    if (!imageRef.current || !containerRef.current) return;
     
     const img = imageRef.current;
+    const container = containerRef.current;
     const { naturalWidth, naturalHeight } = img;
-    const containerW = imageDimensions.width;
-    const containerH = imageDimensions.height;
+    const containerW = container.clientWidth;
+    const containerH = container.clientHeight;
 
-    // object-contain における実際の表示サイズとオフセットを算出
-    const imageAspect = naturalWidth / naturalHeight;
+    // 1. object-contain による表示上の画像サイズとオフセットを計算
+    const imgAspect = naturalWidth / naturalHeight;
     const containerAspect = containerW / containerH;
 
     let visualW, visualH, offsetX, offsetY;
-    if (imageAspect > containerAspect) {
+    if (imgAspect > containerAspect) {
       visualW = containerW;
-      visualH = containerW / imageAspect;
+      visualH = containerW / imgAspect;
       offsetX = 0;
       offsetY = (containerH - visualH) / 2;
     } else {
       visualH = containerH;
-      visualW = containerH * imageAspect;
+      visualW = containerH * imgAspect;
       offsetY = 0;
       offsetX = (containerW - visualW) / 2;
     }
 
-    // 表示サイズからオリジナルサイズへの倍率
-    const scale = naturalWidth / visualW;
+    // 2. 座標をコンテナ空間(px)に展開
+    const pixelCrop = {
+      x: crop.x * containerW,
+      y: crop.y * containerH,
+      width: crop.width * containerW,
+      height: crop.height * containerH
+    };
 
-    // キャンバスの作成（クロップ枠を実寸スケールに変換）
+    // 3. 保存用Canvasの作成（オリジナル解像度を基準にする）
+    const scale = naturalWidth / visualW;
     const canvas = document.createElement('canvas');
-    canvas.width = crop.width * scale;
-    canvas.height = crop.height * scale;
+    canvas.width = pixelCrop.width * scale;
+    canvas.height = pixelCrop.height * scale;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // 1. キャンバスの中心へ移動
+    // 高品質レンダリング設定
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // 4. 座標変換の適用（中心軸回転）
+    // Canvasの中心へ移動
     ctx.translate(canvas.width / 2, canvas.height / 2);
-    
-    // 2. 指定された角度でコンテキストを回転
+    // UIと同じ角度で回転
     ctx.rotate((rotation * Math.PI) / 180);
 
-    // 3. 画像の描画位置を計算
-    // UI上では画像は「自身の中心」で回転している
-    const visualImageCenterX = offsetX + visualW / 2;
-    const visualImageCenterY = offsetY + visualH / 2;
-    const cropCenterX = crop.x + crop.width / 2;
-    const cropCenterY = crop.y + crop.height / 2;
+    // 5. 画像の描画
+    // CSSの回転軸（画像中心）とCanvasの回転軸（枠中心）の差分を計算
+    const visualImgCenterX = offsetX + visualW / 2;
+    const visualImgCenterY = offsetY + visualH / 2;
+    const visualCropCenterX = pixelCrop.x + pixelCrop.width / 2;
+    const visualCropCenterY = pixelCrop.y + pixelCrop.height / 2;
 
-    // クロップ中心から見た画像中心の相対距離（実寸スケール）
-    const dx = (visualImageCenterX - cropCenterX) * scale;
-    const dy = (visualImageCenterY - cropCenterY) * scale;
+    const dx = (visualImgCenterX - visualCropCenterX) * scale;
+    const dy = (visualImgCenterY - visualCropCenterY) * scale;
 
-    // 4. 画像を描画
     ctx.drawImage(
       img,
       dx - naturalWidth / 2,
@@ -204,7 +209,6 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
     <div className="flex flex-col items-center justify-center h-full w-full p-6 animate-fade-in font-sans">
       <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col items-center border border-gray-100 relative">
         
-        {/* Progress Header */}
         <div className="flex items-center gap-4 mb-6">
           <div className="flex flex-col items-center">
             <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-base shadow-md">1</div>
@@ -224,13 +228,11 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
           </p>
         </div>
 
-        {/* Edit Viewport */}
         <div 
           ref={containerRef}
           className="relative overflow-hidden select-none bg-gray-900 rounded-xl shadow-2xl touch-none ring-4 ring-gray-100"
           style={{ width: '100%', height: '45vh', maxWidth: '100%' }}
         >
-          {/* Paper Grid Overlay - Visible during interaction */}
           <div className={`absolute inset-0 z-10 pointer-events-none transition-opacity duration-300 bg-grid-paper ${isRotating || rotation !== 0 ? 'opacity-30' : 'opacity-0'}`}></div>
 
           <img
@@ -251,15 +253,14 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
           <div
             className="absolute border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.7)] cursor-move z-20"
             style={{
-              left: crop.x,
-              top: crop.y,
-              width: crop.width,
-              height: crop.height,
+              left: `${crop.x * 100}%`,
+              top: `${crop.y * 100}%`,
+              width: `${crop.width * 100}%`,
+              height: `${crop.height * 100}%`,
             }}
             onMouseDown={(e) => handleMouseDown(e, 'drag')}
             onTouchStart={(e) => handleMouseDown(e, 'drag')}
           >
-            {/* Guide Grid within the box */}
             <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 opacity-30 pointer-events-none">
               <div className="border-r border-b border-white"></div>
               <div className="border-r border-b border-white"></div>
@@ -272,14 +273,12 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
               <div></div>
             </div>
 
-            {/* Safe Area Warning */}
             <div className="absolute inset-[4%] border border-dashed border-blue-400/80 pointer-events-none flex items-center justify-center">
               <div className="absolute -top-7 left-1/2 -translate-x-1/2 text-[10px] bg-blue-600 text-white px-3 py-1 rounded-full font-bold shadow-lg whitespace-nowrap tracking-widest uppercase">
                 額縁セーフエリア
               </div>
             </div>
 
-            {/* Resize Handle */}
             <div
               className="absolute -bottom-5 -right-5 w-12 h-12 bg-blue-600 cursor-nwse-resize flex items-center justify-center hover:bg-blue-500 transition-all rounded-full border-4 border-white shadow-xl active:scale-90"
               onMouseDown={(e) => handleMouseDown(e, 'resize')}
@@ -292,7 +291,6 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
           </div>
         </div>
 
-        {/* Tilt Adjustment Slider */}
         <div className="w-full max-w-lg mt-8 mb-4 space-y-5 px-2">
           <div className="flex items-center justify-between text-sm font-bold text-gray-700">
             <span className="flex items-center gap-2 text-gray-500">
@@ -315,15 +313,9 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
           <div className="relative flex items-center gap-4">
             <span className="text-[10px] text-gray-300 font-bold font-mono">-15°</span>
             <div className="relative flex-1 group">
-              {/* Slider Track Decor */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1px] h-3 bg-gray-300 pointer-events-none"></div>
-              
               <input 
-                type="range" 
-                min="-15" 
-                max="15" 
-                step="0.1" 
-                value={rotation}
+                type="range" min="-15" max="15" step="0.1" value={rotation}
                 onChange={(e) => setRotation(parseFloat(e.target.value))}
                 onMouseDown={() => setIsRotating(true)}
                 onMouseUp={() => setIsRotating(false)}
@@ -336,7 +328,6 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 mt-6 w-full max-w-lg">
            <button
             onClick={onCancel}
@@ -375,21 +366,6 @@ const CropTool: React.FC<CropToolProps> = ({ imageSrc, onConfirm, onCancel }) =>
           box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
           margin-top: -10px;
           transition: transform 0.1s ease;
-        }
-
-        input[type=range]:active::-webkit-slider-thumb {
-          transform: scale(1.1);
-          background: #1d4ed8;
-        }
-
-        input[type=range]::-moz-range-thumb {
-          height: 24px;
-          width: 24px;
-          border-radius: 50%;
-          background: #2563eb;
-          cursor: pointer;
-          border: 4px solid white;
-          box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
         }
       `}</style>
     </div>

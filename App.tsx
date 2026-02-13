@@ -10,6 +10,7 @@ import ManagementDashboard from './components/ManagementDashboard';
 import { extractPerson, changeClothing } from './services/geminiService';
 import { authService, AuthSession } from './services/authService';
 import { usageService } from './services/usageService';
+import { drawMemorialPhoto } from './services/renderService';
 
 const Logo = ({ className = "h-8" }: { className?: string }) => (
   <div className={`flex items-center gap-3 select-none ${className}`}>
@@ -27,9 +28,8 @@ const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.LOGIN);
   const [isAdminMode, setIsAdminMode] = useState(false);
   
-  // レイヤー管理用ステート
-  const [originalCropped, setOriginalCropped] = useState<string | null>(null); // 背景用の元画像
-  const [personImage, setPersonImage] = useState<string | null>(null);         // 人物レイヤー（AI抽出後）
+  const [originalCropped, setOriginalCropped] = useState<string | null>(null);
+  const [personImage, setPersonImage] = useState<string | null>(null);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [deceasedName, setDeceasedName] = useState<string>('');
   
@@ -87,41 +87,26 @@ const App: React.FC = () => {
     setAppState(AppState.CROPPING);
   }, []);
 
-  /**
-   * 1. トリミング確定
-   * 確定後、AI処理を挟まずに即座に編集画面へ。
-   */
   const handleCropConfirm = useCallback((croppedImage: string) => {
     setOriginalCropped(croppedImage);
     setAppState(AppState.EDITING);
-    // 初期化
     setPersonImage(null);
     setAppliedBg(null);
     setAppliedClothing(null);
-    // AI処理（extractPerson）は、背景変更や着せ替えボタンが押された時に遅延実行する
   }, []);
 
   const handleCropCancel = useCallback(() => {
     setAppState(originalCropped ? AppState.EDITING : AppState.UPLOAD);
   }, [originalCropped]);
 
-  /**
-   * 2. 編集アクションの実行
-   * 背景変更：人物レイヤーがなければまず抽出(AI)を行い、その後レイヤーを差し替える。
-   * 服装変更：AIを叩いて、人物レイヤーを更新。
-   */
   const handleEditAction = useCallback(async (action: EditAction | null) => {
     if (!originalCropped) return;
-
-    // 背景アクションか判定
     const isBgAction = action === null || action.startsWith('REMOVE_BG_');
 
-    // 「元のまま」に戻す場合
     if (action === null) {
       if (isBgAction) setAppliedBg(null);
       else {
         setAppliedClothing(null);
-        // 着せ替えをリセットする場合、もし背景が適用中なら、人物レイヤーを「加工なしの抽出画像」に戻す必要がある
         if (appliedBg) {
           setStatus({ isProcessing: true, message: '元の服装の人物を再抽出しています...' });
           try {
@@ -133,21 +118,17 @@ const App: React.FC = () => {
             setStatus({ isProcessing: false, message: '' });
           }
         } else {
-          // 背景も適用されていないなら、レイヤー自体不要
           setPersonImage(null);
         }
       }
       return;
     }
 
-    // 初めて背景または服装を変更する場合、人物レイヤー(personImage)が必要
     if (!personImage) {
       setStatus({ isProcessing: true, message: '初回のみ、人物を高品質に切り抜いています...' });
       try {
         const extracted = await extractPerson(originalCropped);
         setPersonImage(extracted);
-        // 背景変更ならここで終了（下のsetAppliedBgが実行される）
-        // 着せ替えなら、この後さらにchangeClothingを実行する
       } catch (error: any) {
         setErrorModal({ 
           isOpen: true, 
@@ -160,11 +141,9 @@ const App: React.FC = () => {
     }
 
     if (isBgAction) {
-      // 背景変更（非AI処理）
       setAppliedBg(action);
       setStatus({ isProcessing: false, message: '' });
     } else {
-      // 服装変更（AI処理）
       setStatus({ isProcessing: true, message: '服装を着せ替え中です...' });
       try {
         const newPerson = await changeClothing(originalCropped, action);
@@ -179,62 +158,34 @@ const App: React.FC = () => {
   }, [originalCropped, personImage, appliedBg, appliedClothing]);
 
   /**
-   * 3. 画像の保存
+   * 画像の保存処理
+   * プレビューと同じ描画関数(drawMemorialPhoto)を使い、高解像度で出力する
    */
   const handleDownload = useCallback(async () => {
     if (!originalCropped || !companyInfo) return;
     
-    setStatus({ isProcessing: true, message: '最高画質で画像を合成・出力中...' });
+    setStatus({ isProcessing: true, message: '最高画質(3000x3600)で画像を合成中...' });
 
     try {
       const canvas = document.createElement('canvas');
-      canvas.width = 3000;
-      canvas.height = 3600;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      // 遺影標準：四つ切り（254x305mm）を300dpiで作成する場合のピクセル数
+      const width = 3000;
+      const height = 3600;
 
-      // 1. 背景の描画
-      if (!appliedBg) {
-        const bgImg = await loadImage(originalCropped);
-        ctx.drawImage(bgImg, 0, 0, 3000, 3600);
-      } else {
-        const gradient = ctx.createRadialGradient(1500, 1800, 0, 1500, 1800, 2500);
-        switch (appliedBg) {
-          case EditAction.REMOVE_BG_BLUE: gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(1, '#bfdbfe'); break;
-          case EditAction.REMOVE_BG_GRAY: gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(1, '#d1d5db'); break;
-          case EditAction.REMOVE_BG_PINK: gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(1, '#fbcfe8'); break;
-          case EditAction.REMOVE_BG_YELLOW: gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(1, '#fef3c7'); break;
-          case EditAction.REMOVE_BG_PURPLE: gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(1, '#e9d5ff'); break;
-          case EditAction.REMOVE_BG_WHITE: ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,3000,3600); break;
-        }
-        if (appliedBg !== EditAction.REMOVE_BG_WHITE) {
-          ctx.fillStyle = gradient;
-          ctx.fillRect(0, 0, 3000, 3600);
-        }
-      }
-
-      // 2. 人物レイヤーの描画（透過処理を含む）
-      if (personImage) {
-        const personImg = await loadImage(personImage);
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = 3000;
-        tempCanvas.height = 3600;
-        const tempCtx = tempCanvas.getContext('2d');
-        if (tempCtx) {
-          tempCtx.drawImage(personImg, 0, 0, 3000, 3600);
-          const imgData = tempCtx.getImageData(0, 0, 3000, 3600);
-          const data = imgData.data;
-          for (let i = 0; i < data.length; i += 4) {
-            if (data[i] > 240 && data[i+1] > 240 && data[i+2] > 240) data[i+3] = 0;
-          }
-          tempCtx.putImageData(imgData, 0, 0);
-          ctx.drawImage(tempCanvas, 0, 0);
-        }
-      }
+      await drawMemorialPhoto({
+        canvas,
+        originalCropped,
+        personImage,
+        appliedBg,
+        width,
+        height,
+        isHighRes: true
+      });
 
       const highResBase64 = canvas.toDataURL('image/png');
       const newCount = await usageService.incrementUsage(companyInfo.id);
       setUsageCount(newCount);
+      
       const fileName = deceasedName.trim() ? `瞬影_${deceasedName}.png` : `瞬影_遺影.png`;
       const link = document.createElement('a');
       link.href = highResBase64;
@@ -243,19 +194,11 @@ const App: React.FC = () => {
       
       setStatus({ isProcessing: false, message: '' });
     } catch (err) { 
+      console.error(err);
       setStatus({ isProcessing: false, message: '' });
       setErrorModal({ isOpen: true, title: '保存失敗', message: '画像の合成処理中にエラーが発生しました。' });
     }
   }, [originalCropped, personImage, appliedBg, companyInfo, deceasedName]);
-
-  const loadImage = (src: string): Promise<HTMLImageElement> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = reject;
-      img.src = src;
-    });
-  };
 
   const getStep = () => {
     switch(appState) {
@@ -348,7 +291,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Modals */}
       {isLogoutConfirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in font-sans">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-8 text-center">

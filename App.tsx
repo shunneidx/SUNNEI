@@ -89,28 +89,16 @@ const App: React.FC = () => {
 
   /**
    * 1. トリミング確定
-   * 確定後、直ちにAIを呼び出して人物を抽出（セグメンテーション）する
+   * 確定後、AI処理を挟まずに即座に編集画面へ。
    */
-  const handleCropConfirm = useCallback(async (croppedImage: string) => {
+  const handleCropConfirm = useCallback((croppedImage: string) => {
     setOriginalCropped(croppedImage);
     setAppState(AppState.EDITING);
+    // 初期化
+    setPersonImage(null);
     setAppliedBg(null);
     setAppliedClothing(null);
-
-    setStatus({ isProcessing: true, message: '高品質なレイヤーに分離中です。' });
-    try {
-      // 人物抽出を実行（背景白の画像が返る）
-      const extracted = await extractPerson(croppedImage);
-      setPersonImage(extracted);
-    } catch (error: any) {
-      setErrorModal({ 
-        isOpen: true, 
-        title: '初期解析エラー', 
-        message: '人物の抽出に失敗しました。このまま背景変更を行いたい場合は、元の写真をご利用ください。' 
-      });
-    } finally {
-      setStatus({ isProcessing: false, message: '' });
-    }
+    // AI処理（extractPerson）は、背景変更や着せ替えボタンが押された時に遅延実行する
   }, []);
 
   const handleCropCancel = useCallback(() => {
@@ -119,36 +107,79 @@ const App: React.FC = () => {
 
   /**
    * 2. 編集アクションの実行
-   * 背景変更：AIを叩かず、ステートの更新のみ（即時反映）
-   * 服装変更：AIを叩いて、人物レイヤーを更新
+   * 背景変更：人物レイヤーがなければまず抽出(AI)を行い、その後レイヤーを差し替える。
+   * 服装変更：AIを叩いて、人物レイヤーを更新。
    */
   const handleEditAction = useCallback(async (action: EditAction | null) => {
+    if (!originalCropped) return;
+
     // 背景アクションか判定
     const isBgAction = action === null || action.startsWith('REMOVE_BG_');
 
-    if (isBgAction) {
-      // 背景変更はAIを介さずステート更新のみ
-      setAppliedBg(action);
+    // 「元のまま」に戻す場合
+    if (action === null) {
+      if (isBgAction) setAppliedBg(null);
+      else {
+        setAppliedClothing(null);
+        // 着せ替えをリセットする場合、もし背景が適用中なら、人物レイヤーを「加工なしの抽出画像」に戻す必要がある
+        if (appliedBg) {
+          setStatus({ isProcessing: true, message: '元の服装の人物を再抽出しています...' });
+          try {
+            const extracted = await extractPerson(originalCropped);
+            setPersonImage(extracted);
+          } catch (e) {
+            setErrorModal({ isOpen: true, title: '復元エラー', message: '画像の処理に失敗しました。' });
+          } finally {
+            setStatus({ isProcessing: false, message: '' });
+          }
+        } else {
+          // 背景も適用されていないなら、レイヤー自体不要
+          setPersonImage(null);
+        }
+      }
       return;
     }
 
-    // 服装アクションの場合（AI処理が必要）
-    if (!originalCropped) return;
-    setStatus({ isProcessing: true, message: '服装を着せ替え中です。' });
-    try {
-      const newPerson = await changeClothing(originalCropped, action);
-      setPersonImage(newPerson);
-      setAppliedClothing(action);
-    } catch (error: any) {
-      setErrorModal({ isOpen: true, title: '着せ替え失敗', message: '服装の生成に失敗しました。別の写真か、時間をおいてお試しください。' });
-    } finally {
-      setStatus({ isProcessing: false, message: '' });
+    // 初めて背景または服装を変更する場合、人物レイヤー(personImage)が必要
+    if (!personImage) {
+      setStatus({ isProcessing: true, message: '初回のみ、人物を高品質に切り抜いています...' });
+      try {
+        const extracted = await extractPerson(originalCropped);
+        setPersonImage(extracted);
+        // 背景変更ならここで終了（下のsetAppliedBgが実行される）
+        // 着せ替えなら、この後さらにchangeClothingを実行する
+      } catch (error: any) {
+        setErrorModal({ 
+          isOpen: true, 
+          title: '解析エラー', 
+          message: '人物の抽出に失敗しました。別の写真でお試しください。' 
+        });
+        setStatus({ isProcessing: false, message: '' });
+        return;
+      }
     }
-  }, [originalCropped]);
+
+    if (isBgAction) {
+      // 背景変更（非AI処理）
+      setAppliedBg(action);
+      setStatus({ isProcessing: false, message: '' });
+    } else {
+      // 服装変更（AI処理）
+      setStatus({ isProcessing: true, message: '服装を着せ替え中です...' });
+      try {
+        const newPerson = await changeClothing(originalCropped, action);
+        setPersonImage(newPerson);
+        setAppliedClothing(action);
+      } catch (error: any) {
+        setErrorModal({ isOpen: true, title: '着せ替え失敗', message: '服装の生成に失敗しました。' });
+      } finally {
+        setStatus({ isProcessing: false, message: '' });
+      }
+    }
+  }, [originalCropped, personImage, appliedBg, appliedClothing]);
 
   /**
    * 3. 画像の保存
-   * レイヤー（背景色＋人物）をCanvasで1つに合成してダウンロード
    */
   const handleDownload = useCallback(async () => {
     if (!originalCropped || !companyInfo) return;
@@ -167,7 +198,6 @@ const App: React.FC = () => {
         const bgImg = await loadImage(originalCropped);
         ctx.drawImage(bgImg, 0, 0, 3000, 3600);
       } else {
-        // 背景色の描画
         const gradient = ctx.createRadialGradient(1500, 1800, 0, 1500, 1800, 2500);
         switch (appliedBg) {
           case EditAction.REMOVE_BG_BLUE: gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(1, '#bfdbfe'); break;
@@ -200,16 +230,11 @@ const App: React.FC = () => {
           tempCtx.putImageData(imgData, 0, 0);
           ctx.drawImage(tempCanvas, 0, 0);
         }
-      } else if (!appliedBg) {
-        // 人物レイヤーがない（＝まだ抽出が終わっていない）かつ背景色も選択していない場合は
-        // すでに背景としてoriginalCroppedを描画済みなので何もしない
       }
 
       const highResBase64 = canvas.toDataURL('image/png');
-      
       const newCount = await usageService.incrementUsage(companyInfo.id);
       setUsageCount(newCount);
-      
       const fileName = deceasedName.trim() ? `瞬影_${deceasedName}.png` : `瞬影_遺影.png`;
       const link = document.createElement('a');
       link.href = highResBase64;
@@ -323,7 +348,7 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Modals... */}
+      {/* Modals */}
       {isLogoutConfirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in font-sans">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-8 text-center">

@@ -22,44 +22,103 @@ const loadImage = (src: string): Promise<HTMLImageElement> => {
 };
 
 /**
- * 顔部分を保護するためのソフトマスクを作成する（楕円形に改良）
+ * 2つの画像の位置ズレを検出し、最適なオフセット(dx, dy)を返す
+ * 高解像度での計算を避けるため、内部でダウンサンプリングして高速処理する
  */
-const createFaceMask = (width: number, height: number): HTMLCanvasElement => {
+const findAlignmentOffset = (original: HTMLImageElement, person: HTMLImageElement): { dx: number, dy: number } => {
+  const searchSize = 400; // 計算用の基準サイズ
+  const canvas1 = document.createElement('canvas');
+  const canvas2 = document.createElement('canvas');
+  canvas1.width = canvas2.width = searchSize;
+  canvas1.height = canvas2.height = searchSize * (4/3);
+  
+  const ctx1 = canvas1.getContext('2d');
+  const ctx2 = canvas2.getContext('2d');
+  if (!ctx1 || !ctx2) return { dx: 0, dy: 0 };
+
+  ctx1.drawImage(original, 0, 0, canvas1.width, canvas1.height);
+  ctx2.drawImage(person, 0, 0, canvas2.width, canvas2.height);
+
+  const data1 = ctx1.getImageData(0, 0, canvas1.width, canvas1.height).data;
+  const data2 = ctx2.getImageData(0, 0, canvas2.width, canvas2.height).data;
+
+  // 顔の中心付近（鼻のあたり）のテンプレートを取得 (100x100)
+  const templateW = 100;
+  const templateH = 100;
+  const startX = Math.floor(canvas1.width / 2 - templateW / 2);
+  const startY = Math.floor(canvas1.height * 0.4 - templateH / 2);
+
+  let bestDX = 0;
+  let bestDY = 0;
+  let minDiff = Infinity;
+
+  const searchRange = 25; // ±25ピクセルの範囲で探索
+
+  for (let dy = -searchRange; dy <= searchRange; dy++) {
+    for (let dx = -searchRange; dx <= searchRange; dx++) {
+      let diff = 0;
+      for (let ty = 0; ty < templateH; ty += 4) { // 高速化のため4ピクセル飛ばし
+        for (let tx = 0; tx < templateW; tx += 4) {
+          const idx1 = ((startY + ty) * canvas1.width + (startX + tx)) * 4;
+          const idx2 = ((startY + ty + dy) * canvas2.width + (startX + tx + dx)) * 4;
+          
+          if (idx2 < 0 || idx2 >= data2.length) continue;
+
+          // 輝度の差分を計算
+          const gray1 = (data1[idx1] + data1[idx1 + 1] + data1[idx1 + 2]) / 3;
+          const gray2 = (data2[idx2] + data2[idx2 + 1] + data2[idx2 + 2]) / 3;
+          diff += Math.abs(gray1 - gray2);
+        }
+      }
+      if (diff < minDiff) {
+        minDiff = diff;
+        bestDX = dx;
+        bestDY = dy;
+      }
+    }
+  }
+
+  // searchSizeから元のスケールに変換
+  const scale = original.width / searchSize;
+  return { dx: bestDX * scale, dy: bestDY * scale };
+};
+
+/**
+ * 目と口をピンポイントで守るマイクロマスクを作成する
+ */
+const createMicroPartsMask = (width: number, height: number): HTMLCanvasElement => {
   const maskCanvas = document.createElement('canvas');
   maskCanvas.width = width;
   maskCanvas.height = height;
   const mctx = maskCanvas.getContext('2d');
   if (!mctx) return maskCanvas;
 
-  // 顔の中心位置（少し上にシフト）
-  const centerX = width / 2;
-  const centerY = height * 0.40;
-  
-  // 楕円の半径（顔のパーツ：目鼻口に限定し、背景や肩にかからないサイズ）
-  const radiusX = width * 0.16; // かなり絞り込む
-  const radiusY = height * 0.18;
+  const drawPart = (cx: number, cy: number, rx: number, ry: number) => {
+    mctx.save();
+    mctx.translate(cx, cy);
+    const grad = mctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    grad.addColorStop(0.5, 'rgba(255, 255, 255, 0.9)');
+    grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    mctx.scale(1, ry / rx);
+    mctx.fillStyle = grad;
+    mctx.beginPath();
+    mctx.arc(0, 0, rx, 0, Math.PI * 2);
+    mctx.fill();
+    mctx.restore();
+  };
 
-  mctx.save();
-  mctx.translate(centerX, centerY);
-  
-  // 楕円を描画するためのグラデーション
-  const grad = mctx.createRadialGradient(0, 0, 0, 0, 0, radiusX);
-  grad.addColorStop(0, 'rgba(255, 255, 255, 1)');      // 中心は100%オリジナル
-  grad.addColorStop(0.6, 'rgba(255, 255, 255, 0.8)');  // 表情部分はしっかり保護
-  grad.addColorStop(1, 'rgba(255, 255, 255, 0)');      // 外側に向けて急激に消える
+  // 目と口のおおよその位置（日本人の平均的な比率）
+  // 実際にはもっと精密な位置合わせをオフセット側で行う
+  drawPart(width * 0.40, height * 0.38, width * 0.08, height * 0.05); // 左目
+  drawPart(width * 0.60, height * 0.38, width * 0.08, height * 0.05); // 右目
+  drawPart(width * 0.50, height * 0.53, width * 0.12, height * 0.06); // 口
 
-  mctx.scale(1, radiusY / radiusX); // 縦方向に伸ばして楕円にする
-  mctx.fillStyle = grad;
-  mctx.beginPath();
-  mctx.arc(0, 0, radiusX, 0, Math.PI * 2);
-  mctx.fill();
-  mctx.restore();
-  
   return maskCanvas;
 };
 
 /**
- * 緑色(#00FF00)を透過させる透過処理（スピル抑制を強化）
+ * 緑色(#00FF00)を透過させる透過処理
  */
 const createTransparentCanvas = (img: HTMLImageElement): HTMLCanvasElement => {
   const canvas = document.createElement('canvas');
@@ -76,19 +135,13 @@ const createTransparentCanvas = (img: HTMLImageElement): HTMLCanvasElement => {
     const r = data[i];
     const g = data[i + 1];
     const b = data[i + 2];
-    
-    // 緑色の強さを判定
     const maxRB = Math.max(r, b);
     
-    // 純粋な緑に近い場合のみ透過させる（服への干渉を避けるため閾値を厳格化）
     if (g > maxRB + 45) {
-      data[i + 3] = 0; // 完全に透過
+      data[i + 3] = 0; 
     } else if (g > maxRB + 10) {
-      // 境界線のソフトエッジ
       const alpha = 1 - (g - (maxRB + 10)) / 35;
       data[i + 3] = 255 * Math.max(0, alpha);
-      
-      // 服の縁に残る緑色を補正（デスピル）
       data[i + 1] = maxRB;
     }
   }
@@ -140,32 +193,40 @@ export const drawMemorialPhoto = async ({
     }
   }
 
-  // 2. AI人物レイヤー（服装変更済み・背景なし）の描画
-  if (personImage) {
-    const rawImg = await loadImage(personImage);
-    const transparentPerson = createTransparentCanvas(rawImg);
+  // 2. AI人物レイヤーの描画
+  if (personImage && originalCropped) {
+    const personImg = await loadImage(personImage);
+    const originalImg = await loadImage(originalCropped);
+    
+    // 位置ズレを検出
+    const { dx, dy } = findAlignmentOffset(originalImg, personImg);
+    
+    // AI画像をまず描画（背景なし）
+    const transparentPerson = createTransparentCanvas(personImg);
     ctx.drawImage(transparentPerson, 0, 0, width, height);
 
-    // 3. フェイス・ヒーリング（タイトな楕円マスクで顔パーツのみ復元）
-    if (originalCropped) {
-      const originalImg = await loadImage(originalCropped);
-      const faceMask = createFaceMask(width, height);
+    // 3. フェイス・ヒーリング（パーツ単位の保護合成）
+    // オフセットを適用したマスクを使って、オリジナルの目鼻立ちを重ねる
+    const partsMask = createMicroPartsMask(width, height);
+    
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    const tctx = tempCanvas.getContext('2d');
+    
+    if (tctx) {
+      // マスクを描画
+      tctx.drawImage(partsMask, 0, 0);
+      tctx.globalCompositeOperation = 'source-in';
       
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = width;
-      tempCanvas.height = height;
-      const tctx = tempCanvas.getContext('2d');
-      if (tctx) {
-        // マスクを適用して元の顔パーツのみを描画
-        tctx.drawImage(faceMask, 0, 0);
-        tctx.globalCompositeOperation = 'source-in';
-        tctx.drawImage(originalImg, 0, 0, width, height);
-        
-        // メインキャンバスに重ねる
-        ctx.save();
-        ctx.drawImage(tempCanvas, 0, 0);
-        ctx.restore();
-      }
+      // オリジナル画像を、検出したズレ(dx, dy)の逆方向にスライドさせて描画
+      // これにより、AIが描いた顔の位置と完璧に一致させる
+      tctx.drawImage(originalImg, -dx, -dy, width, height);
+      
+      // メインに重ねる
+      ctx.save();
+      ctx.drawImage(tempCanvas, 0, 0);
+      ctx.restore();
     }
   }
 

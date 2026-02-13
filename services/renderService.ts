@@ -22,7 +22,7 @@ const loadImage = (src: string): Promise<HTMLImageElement> => {
 };
 
 /**
- * 顔部分を保護するためのソフトマスクを作成する
+ * 顔部分を保護するためのソフトマスクを作成する（楕円形に改良）
  */
 const createFaceMask = (width: number, height: number): HTMLCanvasElement => {
   const maskCanvas = document.createElement('canvas');
@@ -31,23 +31,35 @@ const createFaceMask = (width: number, height: number): HTMLCanvasElement => {
   const mctx = maskCanvas.getContext('2d');
   if (!mctx) return maskCanvas;
 
-  // 顔の位置を想定（3:4の構図において、上から40%付近を中心に円形グラデーション）
+  // 顔の中心位置（少し上にシフト）
   const centerX = width / 2;
-  const centerY = height * 0.42;
-  const radiusInner = width * 0.15; // 完全に不透明（100%オリジナル）な範囲
-  const radiusOuter = width * 0.38; // 徐々にAI画像と馴染ませる範囲
+  const centerY = height * 0.40;
+  
+  // 楕円の半径（顔のパーツ：目鼻口に限定し、背景や肩にかからないサイズ）
+  const radiusX = width * 0.16; // かなり絞り込む
+  const radiusY = height * 0.18;
 
-  const grad = mctx.createRadialGradient(centerX, centerY, radiusInner, centerX, centerY, radiusOuter);
-  grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
-  grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  mctx.save();
+  mctx.translate(centerX, centerY);
+  
+  // 楕円を描画するためのグラデーション
+  const grad = mctx.createRadialGradient(0, 0, 0, 0, 0, radiusX);
+  grad.addColorStop(0, 'rgba(255, 255, 255, 1)');      // 中心は100%オリジナル
+  grad.addColorStop(0.6, 'rgba(255, 255, 255, 0.8)');  // 表情部分はしっかり保護
+  grad.addColorStop(1, 'rgba(255, 255, 255, 0)');      // 外側に向けて急激に消える
 
+  mctx.scale(1, radiusY / radiusX); // 縦方向に伸ばして楕円にする
   mctx.fillStyle = grad;
-  mctx.fillRect(0, 0, width, height);
+  mctx.beginPath();
+  mctx.arc(0, 0, radiusX, 0, Math.PI * 2);
+  mctx.fill();
+  mctx.restore();
+  
   return maskCanvas;
 };
 
 /**
- * 緑色(#00FF00)を透過させる透過処理
+ * 緑色(#00FF00)を透過させる透過処理（スピル抑制を強化）
  */
 const createTransparentCanvas = (img: HTMLImageElement): HTMLCanvasElement => {
   const canvas = document.createElement('canvas');
@@ -64,12 +76,20 @@ const createTransparentCanvas = (img: HTMLImageElement): HTMLCanvasElement => {
     const r = data[i];
     const g = data[i + 1];
     const b = data[i + 2];
+    
+    // 緑色の強さを判定
     const maxRB = Math.max(r, b);
-    if (g > maxRB + 30) {
-      data[i + 3] = 0;
-    } else if (g > maxRB - 10) {
+    
+    // 純粋な緑に近い場合のみ透過させる（服への干渉を避けるため閾値を厳格化）
+    if (g > maxRB + 45) {
+      data[i + 3] = 0; // 完全に透過
+    } else if (g > maxRB + 10) {
       // 境界線のソフトエッジ
-      data[i + 3] = 255 * (1 - (g - (maxRB - 10)) / 40);
+      const alpha = 1 - (g - (maxRB + 10)) / 35;
+      data[i + 3] = 255 * Math.max(0, alpha);
+      
+      // 服の縁に残る緑色を補正（デスピル）
+      data[i + 1] = maxRB;
     }
   }
   ctx.putImageData(imageData, 0, 0);
@@ -126,7 +146,7 @@ export const drawMemorialPhoto = async ({
     const transparentPerson = createTransparentCanvas(rawImg);
     ctx.drawImage(transparentPerson, 0, 0, width, height);
 
-    // 3. フェイス・ヒーリング（元の顔をAI画像の上にソフトに重ねる）
+    // 3. フェイス・ヒーリング（タイトな楕円マスクで顔パーツのみ復元）
     if (originalCropped) {
       const originalImg = await loadImage(originalCropped);
       const faceMask = createFaceMask(width, height);
@@ -136,14 +156,13 @@ export const drawMemorialPhoto = async ({
       tempCanvas.height = height;
       const tctx = tempCanvas.getContext('2d');
       if (tctx) {
-        // マスクを適用して元の顔を描画
+        // マスクを適用して元の顔パーツのみを描画
         tctx.drawImage(faceMask, 0, 0);
         tctx.globalCompositeOperation = 'source-in';
         tctx.drawImage(originalImg, 0, 0, width, height);
         
         // メインキャンバスに重ねる
         ctx.save();
-        ctx.globalAlpha = 1.0;
         ctx.drawImage(tempCanvas, 0, 0);
         ctx.restore();
       }

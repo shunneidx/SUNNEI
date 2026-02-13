@@ -20,13 +20,14 @@ export const extractPerson = async (base64Image: string): Promise<string> => {
   const prompt = `あなたは世界最高峰のフォトレタッチャーです。
 入力画像から人物を完璧に分離し、背景をクロマキー合成用の「鮮やかな緑色 (#00FF00)」に置き換えてください。
 
-【厳格な遵守事項】
-1. 人物の造形、顔、表情、髪型、服装の質感、ライティングを1%も変更しないでください。
-2. 背景は影やムラの一切ない、完全な単色「#00FF00」のみで構成してください。
-3. 髪の毛1本1本まで丁寧に境界線を処理し、グリーンの背景と明確に区別できるようにしてください。
-4. 人物のポーズ、大きさ、配置を元の画像から一切変えないでください（アスペクト比 3:4 を維持）。
+【最重要事項】
+1. 人物の位置、大きさ、傾きを1ピクセルも動かさないでください。元の画像と完全に重ね合わせができる必要があります。
+2. 瞳の色、瞳孔の輝き、虹彩の色を1%も変更しないでください。
+3. 表情、髪型、服装の質感を完全に維持してください。
+4. 背景は影のない、完全な単色「#00FF00」に固定してください。
+5. 入力画像のアスペクト比(3:4)と、人物の座標関係を数学的に正確に維持して出力してください。
 
-出力は、背景をグリーンにした画像1枚のみとしてください。`;
+出力は加工画像1枚のみとしてください。`;
 
   try {
     const response = await ai.models.generateContent({
@@ -75,12 +76,13 @@ export const changeClothing = async (base64Image: string, action: EditAction): P
 人物の「顔と表情」を完全に維持したまま、服装を「${clothText}」に差し替えてください。
 
 【厳格なルール】
-1. 人物の顔、髪型、表情を1ピクセルも変えないでください。元の人物そのものであることが最優先です。
-2. 服装のみを指示通りに描き直してください。
-3. 背景はクロマキー合成用の「鮮やかな緑色 (#00FF00)」にしてください。
-4. 人物の配置と大きさを元の画像と完全に一致させ、アスペクト比 3:4 を守ってください。
+1. 人物の顔、瞳、髪型、表情を元の画像と完全に一致させてください。1ピクセルの移動も色の変化も許されません。
+2. 首から上の座標と大きさを元の画像から一切変えないでください。
+3. 服装のみを指示通りに自然に描き直してください。
+4. 背景はクロマキー合成用の「鮮やかな緑色 (#00FF00)」にしてください。
+5. 入力画像(3:4)と同じレイアウトを維持してください。
 
-出力は、背景をグリーンにした加工画像1枚のみとしてください。`;
+出力は加工画像1枚のみとしてください。`;
 
   try {
     const response = await ai.models.generateContent({
@@ -105,7 +107,7 @@ export const repairHeicImage = async (base64Heic: string): Promise<string> => {
     const imagePart = { inlineData: { data: cleanBase64(base64Heic), mimeType: "image/heic" } };
     const response = await ai.models.generateContent({
         model: MODEL_NAME,
-        contents: { parts: [{ text: "Convert to high quality JPEG 3:4." }, imagePart] },
+        contents: { parts: [{ text: "Convert to high quality JPEG 3:4. Keep original aspect and resolution as much as possible." }, imagePart] },
         config: { imageConfig: { aspectRatio: "3:4" } }
     });
     const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);

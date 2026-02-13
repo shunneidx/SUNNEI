@@ -23,7 +23,7 @@ const loadImage = (src: string): Promise<HTMLImageElement> => {
 
 /**
  * 鮮やかな緑色(#00FF00)を透過させ、かつ境界線の緑の反射（スピル）を除去する
- * シニアエンジニア推奨のデスピル（色被り除去）アルゴリズムを採用
+ * 瞳や肌の色を守るため、不透明な領域（人物内部）への干渉を最小限に抑えたアルゴリズム
  */
 const createTransparentCanvas = (img: HTMLImageElement): HTMLCanvasElement => {
   const canvas = document.createElement('canvas');
@@ -40,45 +40,30 @@ const createTransparentCanvas = (img: HTMLImageElement): HTMLCanvasElement => {
     const r = data[i];
     const g = data[i + 1];
     const b = data[i + 2];
+    const lum = (r + g + b) / 3;
 
     // 1. 透明度の決定 (Chroma Keying)
-    // 緑成分が赤(R)と青(B)の最大値よりどれだけ大きいかを算出
     const maxRB = Math.max(r, b);
     const greenDifference = g - maxRB;
     
     if (greenDifference > 30) {
-      // 背景色（純粋な緑）とみなせる領域は完全に透明にする
+      // 背景色（純粋な緑）とみなせる領域
       data[i + 3] = 0;
     } 
-    else if (greenDifference > -15) {
-      // 境界線エリア（髪の毛の端や衣服の輪郭など）
-      // 30から-15までの範囲で、緑の強さに応じて徐々に透明度を下げる
-      const alphaFactor = (greenDifference + 15) / 45; // 0 to 1
-      const alpha = 255 * (1 - Math.pow(alphaFactor, 1.5));
+    else if (greenDifference > -20) {
+      // 境界線エリア（髪の毛の端や輪郭など）
+      const alphaFactor = (greenDifference + 20) / 50; 
+      const alpha = 255 * (1 - Math.pow(Math.max(0, alphaFactor), 1.6));
       data[i + 3] = Math.max(0, Math.min(255, alpha));
       
-      // 2. デスピル処理 (Despill)
-      // 境界線に残る「緑色の光（カラースピル）」を抑制する
-      // 緑(G)の値を、赤(R)と青(B)の平均値または最大値に抑えることで、緑の縁取りを無彩色（グレー）化または本来の色に補正
-      if (g > maxRB) {
-        // 緑成分をRとBのバランスに合わせて抑制
+      // 2. デスピル処理 (境界線のみに限定)
+      // 瞳（暗い色）や肌を守るため、輝度が低すぎる場所や、透明度が低い（人物内部）場所はスキップ
+      if (g > maxRB && data[i + 3] < 240 && lum > 20) {
         const avgRB = (r + b) / 2;
         data[i + 1] = (maxRB + avgRB) / 2; 
       }
-      
-      // 3. エッジ補正
-      // 半透明なピクセルが「白っぽく」浮くのを防ぐため、明度をわずかに調整
-      if (data[i + 3] < 200) {
-        data[i] = Math.max(0, data[i] - 5);
-        data[i + 2] = Math.max(0, data[i + 2] - 5);
-      }
-    } else {
-      // 人物内部の領域
-      // 背景の緑色が反射（スピル）している場合のみ補正
-      if (g > maxRB * 1.05) {
-        data[i + 1] = maxRB;
-      }
-    }
+    } 
+    // 人物内部（alpha 100%に近い領域）は何もしない = 目の色はそのまま維持
   }
   
   ctx.putImageData(imageData, 0, 0);
@@ -137,19 +122,16 @@ export const drawMemorialPhoto = async ({
     }
   }
 
-  // 2. 人物レイヤーの描画 (クロマキー + 高精度デスピル済み)
+  // 2. 人物レイヤーの描画
   if (personImage) {
     const rawImg = await loadImage(personImage);
     const transparentCanvas = createTransparentCanvas(rawImg);
-    
-    // 描画品質の向上
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    
     ctx.drawImage(transparentCanvas, 0, 0, width, height);
   }
 
-  // 3. 装飾（遺影としての仕上げ）
+  // 3. 装飾
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.12)';
   ctx.shadowBlur = isHighRes ? 80 : 12;
@@ -159,7 +141,6 @@ export const drawMemorialPhoto = async ({
   ctx.restore();
 
   if (!isHighRes) {
-    // プレビュー用のガイドライン
     ctx.setLineDash([5, 5]);
     ctx.strokeStyle = 'rgba(255,255,255,0.4)';
     ctx.lineWidth = 1;
